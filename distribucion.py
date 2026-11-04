@@ -189,12 +189,13 @@ def normalizar_mover_cd(df: pd.DataFrame) -> pd.DataFrame:
     c = lambda *o: _col(df, *o)
     est = c("# ESTADIST", "ESTADISTICO", "ESTADÍSTICO")
     cant = c("CANTIDAD", "CANTIDAD A MOVER", "FISICO_WH", "UNIDADES")
+    bod = c("BODEGA", "BODEGA DE SALIDA", "LOCAL DE SALIDA", "LOCAL SALIDA", "CD", "CD DE SALIDA")
     if est is None or cant is None:
         raise ValueError("Se necesitan las columnas 'Estadístico' y 'Cantidad' (o FISICO_WH).")
     out = pd.DataFrame({
         "estadistico": df[est].map(codigo),
         "cantidad": df[cant].map(num),
-        "bodega": df[c("BODEGA")].map(codigo) if c("BODEGA") else None,
+        "bodega": df[bod].map(codigo) if bod else None,
         "descripcion_mov": df[c("DESCRIPCION", "DESCRIPCIÓN")].map(_texto) if c("DESCRIPCION", "DESCRIPCIÓN") else "",
     })
     out = out[out["estadistico"].notna() & (out["cantidad"] > 0)].copy()

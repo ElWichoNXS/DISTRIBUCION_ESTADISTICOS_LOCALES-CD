@@ -15,6 +15,7 @@ import distribucion as d
 from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, ROJO, ROJO_OSC, alto_tabla, aplicar_estilo, grafico,
                     kpis, n, nota, pct, seccion)
 from exportar import excel_cd, excel_locales
+from plantillas import plantilla_cd, plantilla_locales
 from portal import menu_apps
 
 st.set_page_config(page_title="Distribución por días de inventario", page_icon="🚚", layout="wide")
@@ -54,7 +55,9 @@ def subir(etiqueta, key, funcion, ayuda, preferidas=()):
     data = f.getvalue()
     hojas = hojas_de(data, f.name)
     hoja = None
-    if len(hojas) > 1:
+    if "PLANTILLA" in hojas:          # archivo hecho con la plantilla: se lee directo esa hoja
+        hoja = "PLANTILLA"
+    elif len(hojas) > 1:
         idx = next((i for i, h in enumerate(hojas) if any(p in d.normalizar(h) for p in preferidas)), 0)
         hoja = st.selectbox("Hoja", hojas, index=idx, key=f"{key}_hoja")
     try:
@@ -138,13 +141,27 @@ with c1:
         st.caption(f"✅ {n(len(base))} registros · {base['local'].nunique()} locales · "
                    f"{base['estadistico'].nunique()} estadísticos · {base['gerente'].replace('', pd.NA).nunique()} gerentes")
 with c2:
+    clave_mod = "1" if es_m1 else "2"
     if es_m1:
         mov = subir("2) Inventario a mover desde el CD", "mov_1", "leer_mover_cd",
-                    "Columnas: '# ESTADIST' (o Estadístico), cantidad en 'FISICO_WH' (o 'Cantidad') y 'BODEGA'.")
+                    "Usa la plantilla (Estadístico, Bodega de salida, Cantidad) o el archivo INV A MOVER "
+                    "('# ESTADIST', 'BODEGA', 'FISICO_WH').", ["PLANTILLA", "MOVER", "INV"])
     else:
         mov = subir("2) Inventario a mover entre locales", "mov_2", "leer_mover_locales",
-                    "Una fila por local de salida + estadístico. Cantidad = 'Cantidad' o, si no existe, 'INV NETO'.")
+                    "Usa la plantilla (Estadístico, Local de salida, Cantidad, Supervisor, Gerente) o un archivo del BI "
+                    "con '# Local', 'ESTADISTICO' e 'INV NETO'.", ["PLANTILLA", "MOVER", "INV"])
     estado = st.empty()
+    st.markdown(f"""<style>.st-key-plantilla button {{ background:transparent !important; color:{ROJO} !important;
+        border:1.5px solid {ROJO} !important; box-shadow:none !important; }}
+        .st-key-plantilla button p {{ color:{ROJO} !important; }}</style>""", unsafe_allow_html=True)
+    st.container(key="plantilla").download_button(
+        "📄 Descargar plantilla para llenar",
+        data=plantilla_cd() if es_m1 else plantilla_locales(),
+        file_name="PLANTILLA_DISTRIBUCION_CD.xlsx" if es_m1 else "PLANTILLA_REDISTRIBUCION_LOCALES.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch",
+        type="secondary", key=f"plantilla_{clave_mod}",
+        help=("Estadístico, Descripción (opcional), Bodega de salida y Cantidad." if es_m1 else
+              "Estadístico, Descripción (opcional), Local de salida, Cantidad, Supervisor y Gerente (estos dos se completan solos si los dejas vacíos)."))
 
     # ---- ingreso manual
     clave = "1" if es_m1 else "2"
@@ -155,7 +172,7 @@ with c2:
             st.caption("Copia desde Excel y pega en la primera celda (Ctrl+V). Si también subes un archivo, se usa el archivo.")
             if "m1_df" not in st.session_state:
                 st.session_state["m1_df"] = pd.DataFrame({"Estadístico": [""] * 6, "Cantidad": pd.array([pd.NA] * 6, dtype="Int64"),
-                                                          "Bodega": [""] * 6})
+                                                          "Bodega de salida": [""] * 6})
             ed = st.data_editor(st.session_state["m1_df"], num_rows="dynamic", width="stretch", key="ed_m1", height=245,
                                 column_config={"Cantidad": st.column_config.NumberColumn(min_value=0, step=1)})
             manual = ed.replace("", pd.NA).dropna(how="all")

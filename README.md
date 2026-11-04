@@ -31,6 +31,17 @@ máximos cubiertos. En el módulo 2 tampoco recibe un local que sea origen del m
 | Módulo 2 · Inventario a mover | `# Local` (o `Local de salida`), `ESTADISTICO`, cantidad en `Cantidad` o, si no existe, `INV NETO`; opcional `SUPERV.` y `GERENTE` |
 | Maestro de locales (opcional) | `# Local`, `SUPERV.`, `GERENTE`, `DESIGNACION` |
 
+### Plantillas
+Cada módulo tiene el botón **📄 Descargar plantilla para llenar** debajo del cargador del inventario a mover:
+
+| Plantilla | Columnas (rojas = obligatorias, grises = opcionales) |
+|---|---|
+| `PLANTILLA_DISTRIBUCION_CD.xlsx` | **Estadístico**, Descripción, **Bodega de salida**, **Cantidad** |
+| `PLANTILLA_REDISTRIBUCION_LOCALES.xlsx` | **Estadístico**, Descripción, **Local de salida**, **Cantidad**, Supervisor, Gerente |
+
+Cada plantilla trae las hojas PLANTILLA (la que se llena y se lee), EJEMPLO e INSTRUCCIONES. Si Supervisor y
+Gerente quedan vacíos, se completan con el local de salida.
+
 Acepta xlsx, xls, xlsb y csv (separador `,` o `;`). El inventario a mover también se puede **digitar o pegar** en la
 app; en el módulo 2, al escribir el local de salida se completan el supervisor y el gerente.
 
@@ -55,6 +66,7 @@ python -m pytest
 app.py            interfaz (dos módulos)
 distribucion.py   lectura de archivos y lógica de reparto
 exportar.py       Excel de resultados con gráficos
+plantillas.py     plantillas descargables para ingresar el inventario a mover
 estilo.py         estilo visual compartido
 portal.py         menú "Mis apps"
 tests/            pruebas con datos de ejemplo

@@ -47,3 +47,36 @@ def test_locales_prioridad_supervisor_luego_gerente():
     assert 5 not in set(dist["Local Destino"])        # otro gerente: no se asigna automáticamente
     assert res.resumen["nivel_sup"] == 10 and res.resumen["nivel_ger"] == 20 and res.resumen["pendiente"] == 10
     assert "5 (" in res.pendientes["Sugerencia (otros gerentes · capacidad)"].iloc[0]
+
+
+def _llenar(bytes_xlsx, filas):
+    import io
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(bytes_xlsx))
+    ws = wb["PLANTILLA"]
+    for i, fila in enumerate(filas, 2):
+        for j, v in enumerate(fila, 1):
+            ws.cell(i, j, v)
+    out = io.BytesIO()
+    wb.save(out)
+    out.seek(0)
+    out.name = "plantilla.xlsx"
+    return out
+
+
+def test_plantilla_cd_se_lee():
+    from plantillas import plantilla_cd
+    f = _llenar(plantilla_cd(), [("111", "ITEM PRUEBA", 100, 30), (None, None, None, None)])
+    mov = d.leer_mover_cd(f)
+    assert len(mov) == 1 and mov.loc[0, "estadistico"] == 111 and mov.loc[0, "bodega"] == 100 and mov.loc[0, "cantidad"] == 30
+    res = d.distribuir_cd(BASE, mov, d.Parametros(dias_max=10))
+    assert res.resumen["und_asignadas"] == 30
+
+
+def test_plantilla_locales_se_lee_y_completa():
+    from plantillas import plantilla_locales
+    f = _llenar(plantilla_locales(), [("111", "", "7-LOCAL 7", 40, "", "")])
+    mov = d.normalizar_mover_locales(d._con_encabezado(d.leer_tabla(f), ["ESTADIST", "LOCAL"]), d.maestro_locales(BASE))
+    assert mov.loc[0, "origen"] == 7 and mov.loc[0, "supervisor"] == "sup.a1" and mov.loc[0, "gerente"] == "ger.a"
+    res = d.redistribuir_locales(BASE, mov, d.Parametros(dias_max=10))
+    assert res.resumen["nivel_sup"] == 10
