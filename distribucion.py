@@ -477,7 +477,9 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros)
         sug = ""
         if falta > 0:
             otros = bi_all[bi_all["gerente"] != r.gerente].copy()
-            otros["cap_rest"] = otros.apply(lambda x: max(0, int(p.dias_max * x.venta_diaria - x.stock - recibido.get((x.local, g), 0))), axis=1)
+            # vectorizado: funciona también cuando no hay locales de otros gerentes (tabla vacía)
+            ya = otros["local"].map(lambda l: recibido.get((l, g), 0)).astype(float)
+            otros["cap_rest"] = (p.dias_max * otros["venta_diaria"] - otros["stock"] - ya).clip(lower=0).fillna(0).astype(int)
             otros = otros[otros["cap_rest"] > 0].sort_values("cap_rest", ascending=False).head(5)
             sug = ", ".join(f"{int(x.local)} ({x.gerente.split('.')[0].title()}: {int(x.cap_rest)})" for x in otros.itertuples())
         motivo = ""

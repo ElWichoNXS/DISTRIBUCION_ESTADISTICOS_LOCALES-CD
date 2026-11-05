@@ -80,3 +80,11 @@ def test_plantilla_locales_se_lee_y_completa():
     assert mov.loc[0, "origen"] == 7 and mov.loc[0, "supervisor"] == "sup.a1" and mov.loc[0, "gerente"] == "ger.a"
     res = d.redistribuir_locales(BASE, mov, d.Parametros(dias_max=10))
     assert res.resumen["nivel_sup"] == 10
+
+
+def test_pendiente_sin_locales_de_otros_gerentes():
+    # todos los locales son del mismo gerente: no hay a quién sugerir y no debe fallar
+    base = BASE[BASE["gerente"] == "ger.a"]
+    res = d.redistribuir_locales(base, d.leer_mover_locales(D / "mover_locales.csv"), d.Parametros(dias_max=10))
+    assert res.resumen["pendiente"] == 10
+    assert res.pendientes["Sugerencia (otros gerentes · capacidad)"].iloc[0] == "Sin locales con capacidad"
