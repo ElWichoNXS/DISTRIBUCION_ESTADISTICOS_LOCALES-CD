@@ -16,12 +16,13 @@ def test_cd_no_supera_dias_y_nivela():
     p = d.Parametros(dias_max=10)
     res = d.distribuir_cd(BASE, d.leer_mover_cd(D / "mover_cd.csv"), p)
     dist = res.distribucion.set_index("Local Destino")
-    # capacidad: L1 10, L2 0 (ya tiene 10 días), L3 20, L5 20; L4 exclusión, L6 sin venta, L7 sobrestock
-    assert res.resumen["und_asignadas"] == 50 and res.resumen["und_sobrante"] == 50
-    assert set(dist.index) == {1, 3, 5}
+    # capacidad: L1 10, L2 0 (ya tiene 10 días), L3 20, L4 20, L5 20; L6 sin venta, L7 sobrestock
+    # la base ya viene filtrada: un local con EXCLUSION en la base SÍ recibe (L4)
+    assert res.resumen["und_asignadas"] == 70 and res.resumen["und_sobrante"] == 30
+    assert set(dist.index) == {1, 3, 4, 5}
     assert (res.distribucion["Días Finales"] <= 10).all()
     motivos = set(res.no_considerados["Motivo"])
-    assert {"EXCLUSIÓN IP", "SIN VENTA"} <= motivos
+    assert "SIN VENTA" in motivos and not any("EXCLUS" in m for m in motivos)
 
 
 def test_cd_nivelacion_con_poco_stock():
@@ -32,9 +33,11 @@ def test_cd_nivelacion_con_poco_stock():
     assert dist.max() - dist.min() <= 1
 
 
-def test_empaque():
+def test_empaque_usa_columna_empaque_no_empq_final():
     res = d.distribuir_cd(BASE, d.leer_mover_cd(D / "mover_cd.csv"), d.Parametros(dias_max=10, redondear_empaque=True))
-    assert (res.distribucion["Cantidad"] % 6 == 0).all()
+    assert (res.distribucion["Cantidad"] % 6 == 0).all()          # EMPAQUE = 6
+    assert (res.distribucion["Cantidad"] % 12 != 0).any()         # no Empq_final = 12
+    assert res.por_item["Empaque Usado"].iloc[0] == 6
 
 
 def test_locales_prioridad_supervisor_luego_gerente():
@@ -43,9 +46,18 @@ def test_locales_prioridad_supervisor_luego_gerente():
     sup = dist[dist["Nivel"] == d.NIVEL_SUP]
     ger = dist[dist["Nivel"] == d.NIVEL_GER]
     assert set(sup["Local Destino"]) == {1}           # mismo supervisor sup.a1 (L2 ya tiene 10 días)
-    assert set(ger["Local Destino"]) == {3}           # mismo gerente ger.a (L4 excluido)
+    assert set(ger["Local Destino"]) == {3, 4}        # mismo gerente ger.a
     assert 5 not in set(dist["Local Destino"])        # otro gerente: no se asigna automáticamente
-    assert res.resumen["nivel_sup"] == 10 and res.resumen["nivel_ger"] == 20 and res.resumen["pendiente"] == 10
+    assert res.resumen["nivel_sup"] == 10 and res.resumen["nivel_ger"] == 30 and res.resumen["pendiente"] == 0
+
+
+def test_locales_pendiente_con_sugerencia_de_otro_gerente():
+    import pandas as pd
+    mov = pd.DataFrame({"estadistico": [111], "origen": [7], "cantidad": [60], "supervisor": ["sup.a1"],
+                        "gerente": ["ger.a"], "descripcion_mov": [""]})
+    res = d.redistribuir_locales(BASE, mov, d.Parametros(dias_max=10))
+    # capacidad sup.a1 = 10, ger.a = 40 → 10 pendientes; L5 (ger.b) se sugiere
+    assert res.resumen["pendiente"] == 10
     assert "5 (" in res.pendientes["Sugerencia (otros gerentes · capacidad)"].iloc[0]
 
 
@@ -84,7 +96,10 @@ def test_plantilla_locales_se_lee_y_completa():
 
 def test_pendiente_sin_locales_de_otros_gerentes():
     # todos los locales son del mismo gerente: no hay a quién sugerir y no debe fallar
+    import pandas as pd
     base = BASE[BASE["gerente"] == "ger.a"]
-    res = d.redistribuir_locales(base, d.leer_mover_locales(D / "mover_locales.csv"), d.Parametros(dias_max=10))
+    mov = pd.DataFrame({"estadistico": [111], "origen": [7], "cantidad": [60], "supervisor": ["sup.a1"],
+                        "gerente": ["ger.a"], "descripcion_mov": [""]})
+    res = d.redistribuir_locales(base, mov, d.Parametros(dias_max=10))
     assert res.resumen["pendiente"] == 10
     assert res.pendientes["Sugerencia (otros gerentes · capacidad)"].iloc[0] == "Sin locales con capacidad"

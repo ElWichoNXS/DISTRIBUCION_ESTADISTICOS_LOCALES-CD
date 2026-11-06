@@ -73,8 +73,7 @@ def _encabezado_resumen(ws, titulo, p: Parametros, kpis: list[tuple]):
     ws["A2"] = (f"Generado {datetime.now():%d/%m/%Y %H:%M} · Días máx {p.dias_max:g} · "
                 f"Venta diaria: {'pronóstico diario del BI' if p.fuente_venta == 'pronostico' else f'CONSUMOS ACU ÷ {p.dias_consumo_acu:g}'}"
                 f" · Stock = INV NETO{' + TRÁNSITO' if p.usar_transito else ''}"
-                f" · {'Redondeo a empaque' if p.redondear_empaque else 'Unidades sueltas'}"
-                f" · {'Sin locales con exclusión/bloqueo' if p.excluir_exclusiones else 'Incluye locales con exclusión'}")
+                f" · {'Redondeo a múltiplos de EMPAQUE' if p.redondear_empaque else 'Unidades sueltas'}")
     ws["A2"].font = Font(italic=True, size=9, color="595959")
     for k, (lbl, val) in enumerate(kpis):
         c = 1 + k * 2
@@ -148,7 +147,7 @@ def excel_cd(res: Resultado, p: Parametros) -> bytes:
     _hoja(wb, "SOBRANTE", res.pendientes, "UNIDADES SIN ASIGNAR",
           "Quedan en el CD: los locales habilitados no pueden recibir más sin pasar los días máximos.", ROJO)
     _hoja(wb, "LOCALES NO CONSIDERADOS", res.no_considerados, "LOCALES DE LA BASE QUE NO RECIBEN",
-          "Motivo: exclusión, bloqueo, sin venta o ya con los días máximos cubiertos.", "595959")
+          "Motivo: sin venta o ya con los días máximos cubiertos.", "595959")
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -216,7 +215,7 @@ def excel_locales(res: Resultado, p: Parametros) -> bytes:
     _hoja(wb, "PENDIENTE MANUAL", res.pendientes, "PENDIENTE DE ASIGNACIÓN MANUAL",
           "No hay capacidad en locales del mismo supervisor ni del mismo gerente. Se sugieren locales de otros gerentes con capacidad.", ROJO)
     _hoja(wb, "LOCALES NO CONSIDERADOS", res.no_considerados, "LOCALES DE LA BASE QUE NO RECIBEN",
-          "Motivo: exclusión, bloqueo, sin venta o ya con los días máximos cubiertos.", "595959")
+          "Motivo: sin venta o ya con los días máximos cubiertos.", "595959")
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

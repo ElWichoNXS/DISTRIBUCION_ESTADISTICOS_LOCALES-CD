@@ -81,9 +81,8 @@ with st.sidebar:
                                    help="El BI calcula DIAS STOCK SUC = INV NETO ÷ (CONSUMOS ACU ÷ 3).")
         usar_transito = st.checkbox("Sumar TRÁNSITO al stock del local", value=True)
     with st.expander("Reglas de envío", expanded=True):
-        excluir = st.checkbox("No enviar a locales con EXCLUSIÓN (IP/LI) o bloqueados", value=True)
-        empaque = st.checkbox("Redondear a múltiplos de empaque (Empq_final)", value=False,
-                              help="Si está activo, cada local recibe empaques completos; puede quedar sobrante.")
+        empaque = st.checkbox("Redondear a múltiplos de EMPAQUE", value=False,
+                              help="Usa la columna EMPAQUE de la base: cada local recibe empaques completos; puede quedar sobrante.")
         filtrar_bodega = st.checkbox("Módulo 1: solo locales de la bodega de salida", value=True,
                                      help="Usa la columna BODEGA de la base para cruzar con la bodega del inventario a mover.")
     with st.expander("📘 Cómo decide el programa"):
@@ -97,7 +96,7 @@ with st.sidebar:
             "- **Módulo 2:** primero locales del **mismo supervisor**, luego del **mismo gerente**; lo que no cabe queda "
             "**pendiente manual** con sugerencias de otros gerentes.")
 params = d.Parametros(dias_max=dias_max, fuente_venta="pronostico" if fuente.startswith("Pron") else "consumo",
-                      dias_consumo_acu=dias_acu, excluir_exclusiones=excluir, usar_transito=usar_transito,
+                      dias_consumo_acu=dias_acu, usar_transito=usar_transito,
                       redondear_empaque=empaque, filtrar_bodega=filtrar_bodega)
 
 # ----------------------------------------------------------------------
@@ -257,7 +256,7 @@ def calcular(es_m1, base, mov, p_tuple):
     return res, excel_locales(res, p)
 
 
-p_tuple = (params.dias_max, params.fuente_venta, params.dias_consumo_acu, params.excluir_exclusiones,
+p_tuple = (params.dias_max, params.fuente_venta, params.dias_consumo_acu,
            params.usar_transito, params.redondear_empaque, params.filtrar_bodega)
 res, excel = calcular(es_m1, base, mov, p_tuple)
 r = res.resumen
@@ -391,7 +390,7 @@ if es_m1:
     with t_sob:
         if len(res.pendientes):
             nota(f"Estas unidades quedan en el CD: los locales habilitados no pueden recibir más sin pasar {dias_max:g} días. "
-                 "Puedes subir los días máximos o incluir locales con exclusión desde la barra lateral.", "warn")
+                 "Puedes subir los días máximos desde la barra lateral o agregar locales a la base.", "warn")
         tabla(res.pendientes)
     with t_no:
         tabla(res.no_considerados)

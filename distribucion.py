@@ -17,6 +17,8 @@ Conceptos (por local + estadístico):
     días actuales  = stock actual ÷ venta diaria
     capacidad      = días máx × venta diaria − stock actual  (nunca negativa)
     Un local sin venta no recibe (no se envía producto donde no rota).
+    La base ya viene filtrada con los locales habilitados: no se aplican exclusiones adicionales.
+    Redondeo opcional a múltiplos de EMPAQUE.
 """
 from __future__ import annotations
 
@@ -109,7 +111,6 @@ def _col(df: pd.DataFrame, *opciones) -> str | None:
 
 
 FECHA = re.compile(r"^\d{1,2}/[A-Z]{3}/\d{4}$")
-BLOQUEOS = ("BLOQUEAD", "NO EXISTE RELACION")
 
 
 # ------------------------------------------------------------------ base de locales habilitados
@@ -139,7 +140,7 @@ def leer_base(archivo, hoja=None) -> pd.DataFrame:
         "fisico": df[c("Físico", "FISICO")].map(num) if c("Físico", "FISICO") else 0.0,
         "transito": df[c("TRANSITO")].map(num) if c("TRANSITO") else 0.0,
         "exhibicion": df[c("Uni Exhibición", "EXHIBICION")].map(num) if c("Uni Exhibición", "EXHIBICION") else 0.0,
-        "empaque": df[c("Empq_final", "EMPAQUE")].map(num) if c("Empq_final", "EMPAQUE") else 1.0,
+        "empaque": df[c("EMPAQUE")].map(num) if c("EMPAQUE") else 1.0,   # empaque (no Empq_final)
     })
     if fechas:
         pron = df[fechas].apply(lambda s: s.map(lambda v: num(v) if _texto(v) != "" else float("nan")))
@@ -255,7 +256,6 @@ class Parametros:
     dias_max: float = 15.0
     fuente_venta: str = "pronostico"     # "pronostico" | "consumo"
     dias_consumo_acu: float = 3.0       # cuántos días representa CONSUMOS ACU
-    excluir_exclusiones: bool = True    # EXCLUSION IP/LI y bloqueos
     usar_transito: bool = True
     redondear_empaque: bool = False
     filtrar_bodega: bool = True         # Módulo 1: solo locales abastecidos por la bodega de salida
@@ -274,10 +274,6 @@ def preparar(base: pd.DataFrame, p: Parametros) -> pd.DataFrame:
     b["capacidad"] = (p.dias_max * b["venta_diaria"] - b["stock"]).clip(lower=0).fillna(0).apply(lambda x: int(x + 1e-9))
 
     def motivo(r):
-        if p.excluir_exclusiones and r.exclusion:
-            return f"EXCLUSIÓN {r.exclusion}"
-        if p.excluir_exclusiones and any(k in normalizar(r.observacion) for k in BLOQUEOS):
-            return "BLOQUEADO / SIN RELACIÓN"
         if r.venta_diaria <= 0:
             return "SIN VENTA"
         if r.capacidad <= 0:
@@ -403,7 +399,7 @@ def _obs_item(en_base, habil, q, asig, cap, pack):
     if en_base == 0:
         return "El estadístico no está en la base de locales"
     if habil == 0:
-        return "Ningún local habilitado puede recibir (exclusiones, sin venta o ya con días máx)"
+        return "Ningún local de la base puede recibir (sin venta o ya con los días máx)"
     if asig >= q:
         return "Asignado completo"
     if cap < q:
