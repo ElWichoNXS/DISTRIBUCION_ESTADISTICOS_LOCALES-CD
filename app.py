@@ -76,10 +76,11 @@ with st.sidebar:
                                step=1.0, help="Ningún local queda con más de estos días de inventario después del traspaso.")
     with st.expander("Venta diaria y stock", expanded=False):
         fuente = st.radio("Venta diaria", ["Pronóstico diario del BI", "CONSUMOS ACU"], index=0,
-                          help="Pronóstico: promedio de las columnas de fecha del BI (si falta, usa CONSUMOS ACU).")
+                          help="Pronóstico: promedio de las columnas de fecha del BI (si un local no tiene pronóstico, "
+                               "usa CONSUMOS ACU ÷ días). CONSUMOS ACU: venta diaria = CONSUMOS ACU ÷ los días de abajo.")
         dias_acu = st.number_input("CONSUMOS ACU representa (días)", min_value=1.0, value=3.0, step=1.0,
-                                   help="El BI calcula DIAS STOCK SUC = INV NETO ÷ (CONSUMOS ACU ÷ 3).")
-        usar_transito = st.checkbox("Sumar TRÁNSITO al stock del local", value=True)
+                                   help="Venta diaria = CONSUMOS ACU ÷ este número. Con 3 coincide con DIAS STOCK SUC del BI.")
+        st.caption("Stock del local = INV NETO + ROQ LTC + ROQ PTL (INV NETO ya incluye el tránsito).")
     with st.expander("Reglas de envío", expanded=True):
         empaque = st.checkbox("Redondear a múltiplos de EMPAQUE", value=False,
                               help="Usa la columna EMPAQUE de la base: cada local recibe empaques completos; puede quedar sobrante.")
@@ -88,7 +89,7 @@ with st.sidebar:
     with st.expander("📘 Cómo decide el programa"):
         st.markdown(
             "- **Venta diaria** del local según el parámetro elegido.\n"
-            "- **Stock actual** = INV NETO (+ TRÁNSITO).\n"
+            "- **Stock actual** = INV NETO + ROQ LTC + ROQ PTL (INV NETO ya incluye el tránsito).\n"
             "- **Capacidad** = días máx × venta diaria − stock actual.\n"
             "- **Nivelación:** se entrega de a una unidad (o empaque) al local con **menos días de inventario**, "
             "hasta repartir todo o hasta que todos lleguen a los días máximos.\n"
@@ -96,7 +97,7 @@ with st.sidebar:
             "- **Módulo 2:** primero locales del **mismo supervisor**, luego del **mismo gerente**; lo que no cabe queda "
             "**pendiente manual** con sugerencias de otros gerentes.")
 params = d.Parametros(dias_max=dias_max, fuente_venta="pronostico" if fuente.startswith("Pron") else "consumo",
-                      dias_consumo_acu=dias_acu, usar_transito=usar_transito,
+                      dias_consumo_acu=dias_acu,
                       redondear_empaque=empaque, filtrar_bodega=filtrar_bodega)
 
 # ----------------------------------------------------------------------
@@ -135,7 +136,7 @@ c1, c2 = st.columns(2)
 with c1:
     base = subir("1) Base de locales habilitados (BI)", "base", "leer_base",
                  "Una fila por local + estadístico: '# Local', 'ESTADISTICO', 'SUPERV.', 'GERENTE', 'INV NETO', "
-                 "'TRANSITO', 'CONSUMOS ACU' y las columnas de pronóstico por fecha.", ["BASE", "INVENTARIO"])
+                 "'ROQ_LTC', 'ROQ_PTL', 'CONSUMOS ACU' y las columnas de pronóstico por fecha.", ["BASE", "INVENTARIO"])
     if base is not None:
         st.caption(f"✅ {n(len(base))} registros · {base['local'].nunique()} locales · "
                    f"{base['estadistico'].nunique()} estadísticos · {base['gerente'].replace('', pd.NA).nunique()} gerentes")
@@ -257,7 +258,7 @@ def calcular(es_m1, base, mov, p_tuple):
 
 
 p_tuple = (params.dias_max, params.fuente_venta, params.dias_consumo_acu,
-           params.usar_transito, params.redondear_empaque, params.filtrar_bodega)
+           params.redondear_empaque, params.filtrar_bodega)
 res, excel = calcular(es_m1, base, mov, p_tuple)
 r = res.resumen
 dist = res.distribucion

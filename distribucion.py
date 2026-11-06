@@ -13,7 +13,7 @@ Módulo 2 · Redistribución entre locales
 Conceptos (por local + estadístico):
     venta diaria   = pronóstico diario (promedio de las columnas de fecha del BI);
                      si no hay pronóstico, CONSUMOS ACU ÷ días que representa (3, como DIAS STOCK SUC del BI).
-    stock actual   = INV NETO + TRÁNSITO
+    stock actual   = INV NETO + ROQ_LTC + ROQ_PTL   (INV NETO ya incluye el tránsito)
     días actuales  = stock actual ÷ venta diaria
     capacidad      = días máx × venta diaria − stock actual  (nunca negativa)
     Un local sin venta no recibe (no se envía producto donde no rota).
@@ -138,7 +138,8 @@ def leer_base(archivo, hoja=None) -> pd.DataFrame:
         "consumo_acu": df[c("CONSUMOS ACU", "CONS ACUM")].map(num) if c("CONSUMOS ACU", "CONS ACUM") else 0.0,
         "inv_neto": df[c("INV NETO", "INV_NETO")].map(num) if c("INV NETO", "INV_NETO") else 0.0,
         "fisico": df[c("Físico", "FISICO")].map(num) if c("Físico", "FISICO") else 0.0,
-        "transito": df[c("TRANSITO")].map(num) if c("TRANSITO") else 0.0,
+        "roq_ltc": df[c("ROQ_LTC", "ROQ LTC")].map(num) if c("ROQ_LTC", "ROQ LTC") else 0.0,
+        "roq_ptl": df[c("ROQ_PTL", "ROQ PTL")].map(num) if c("ROQ_PTL", "ROQ PTL") else 0.0,
         "exhibicion": df[c("Uni Exhibición", "EXHIBICION")].map(num) if c("Uni Exhibición", "EXHIBICION") else 0.0,
         "empaque": df[c("EMPAQUE")].map(num) if c("EMPAQUE") else 1.0,   # empaque (no Empq_final)
     })
@@ -256,7 +257,6 @@ class Parametros:
     dias_max: float = 15.0
     fuente_venta: str = "pronostico"     # "pronostico" | "consumo"
     dias_consumo_acu: float = 3.0       # cuántos días representa CONSUMOS ACU
-    usar_transito: bool = True
     redondear_empaque: bool = False
     filtrar_bodega: bool = True         # Módulo 1: solo locales abastecidos por la bodega de salida
 
@@ -269,7 +269,8 @@ def preparar(base: pd.DataFrame, p: Parametros) -> pd.DataFrame:
     else:
         b["venta_diaria"] = por_consumo
     b["venta_diaria"] = b["venta_diaria"].fillna(0).clip(lower=0)
-    b["stock"] = b["inv_neto"].clip(lower=0) + (b["transito"].clip(lower=0) if p.usar_transito else 0)
+    # INV NETO ya considera el tránsito; se suma lo que ya está pedido (ROQ LTC + ROQ PTL)
+    b["stock"] = (b["inv_neto"] + b["roq_ltc"].clip(lower=0) + b["roq_ptl"].clip(lower=0)).clip(lower=0)
     b["dias_actuales"] = (b["stock"] / b["venta_diaria"]).where(b["venta_diaria"] > 0)
     b["capacidad"] = (p.dias_max * b["venta_diaria"] - b["stock"]).clip(lower=0).fillna(0).apply(lambda x: int(x + 1e-9))
 

@@ -72,7 +72,7 @@ def _encabezado_resumen(ws, titulo, p: Parametros, kpis: list[tuple]):
     ws["A1"].font = Font(bold=True, size=15, color=ROJO)
     ws["A2"] = (f"Generado {datetime.now():%d/%m/%Y %H:%M} · Días máx {p.dias_max:g} · "
                 f"Venta diaria: {'pronóstico diario del BI' if p.fuente_venta == 'pronostico' else f'CONSUMOS ACU ÷ {p.dias_consumo_acu:g}'}"
-                f" · Stock = INV NETO{' + TRÁNSITO' if p.usar_transito else ''}"
+                f" · Stock = INV NETO + ROQ LTC + ROQ PTL"
                 f" · {'Redondeo a múltiplos de EMPAQUE' if p.redondear_empaque else 'Unidades sueltas'}")
     ws["A2"].font = Font(italic=True, size=9, color="595959")
     for k, (lbl, val) in enumerate(kpis):

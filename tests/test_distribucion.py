@@ -103,3 +103,19 @@ def test_pendiente_sin_locales_de_otros_gerentes():
     res = d.redistribuir_locales(base, mov, d.Parametros(dias_max=10))
     assert res.resumen["pendiente"] == 10
     assert res.pendientes["Sugerencia (otros gerentes · capacidad)"].iloc[0] == "Sin locales con capacidad"
+
+
+def test_stock_es_inv_neto_mas_roq_ltc_y_ptl_sin_transito():
+    b = BASE.copy()
+    b.loc[b.local == 1, ["inv_neto", "roq_ltc", "roq_ptl", "transito"]] = [1, 2, 3, 50]
+    prep = d.preparar(b, d.Parametros(dias_max=10)).set_index("local")
+    assert prep.loc[1, "stock"] == 6                    # 1 + 2 + 3; el tránsito no se suma
+    assert prep.loc[1, "capacidad"] == 4                # 10 días × 1 und/día − 6
+
+
+def test_venta_diaria_consumos_acu_dividido_dias():
+    p = d.Parametros(fuente_venta="consumo", dias_consumo_acu=3)
+    prep = d.preparar(BASE, p).set_index("local")
+    assert prep.loc[3, "venta_diaria"] == 6 / 3         # CONSUMOS ACU 6 ÷ 3 días
+    p.dias_consumo_acu = 6
+    assert d.preparar(BASE, p).set_index("local").loc[3, "venta_diaria"] == 1
