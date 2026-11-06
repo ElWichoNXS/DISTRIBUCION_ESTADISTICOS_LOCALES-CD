@@ -47,7 +47,7 @@ Acepta xlsx, xls, xlsb y csv (separador `,` o `;`). El inventario a mover tambi�
 app; en el módulo 2, al escribir el local de salida se completan el supervisor y el gerente.
 
 ## Resultado
-Gráficos en la app y Excel descargable con: **RESUMEN** (indicadores y gráficos), **DISTRIBUCIÓN** (lista para grabar),
+Gráficos en la app y Excel descargable con: **RESUMEN** (indicadores y gráficos), **FORZADOS** (Módulo 1: solo Estadístico, Descripción, Local Destino y Cantidad), **DISTRIBUCIÓN** (lista para grabar),
 **SOBRANTE** / **PENDIENTE MANUAL** y **LOCALES NO CONSIDERADOS** (con el motivo).
 
 ## Ejecutar

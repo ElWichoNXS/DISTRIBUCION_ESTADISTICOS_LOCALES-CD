@@ -120,6 +120,28 @@ def _grafico_barras(ws, titulo, fila_h, fila_fin, col_cat, cols_val, colores, an
     ws.add_chart(ch, ancla)
 
 
+def _hoja_forzados(wb, dist: pd.DataFrame):
+    """Hoja FORZADOS: solo Estadístico, Descripción, Local Destino y Cantidad, desde la fila 1 (lista para copiar)."""
+    ws = wb.create_sheet("FORZADOS")
+    cols = ["Estadístico", "Descripción", "Local Destino", "Cantidad"]
+    for j, (h, ancho) in enumerate(zip(cols, [14, 42, 14, 11]), 1):
+        c = ws.cell(1, j, h)
+        c.fill = PatternFill("solid", fgColor=ROJO_OSC)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.alignment = Alignment(horizontal="center")
+        ws.column_dimensions[get_column_letter(j)].width = ancho
+    if len(dist):
+        f = dist[cols].copy()
+        f = f[f["Cantidad"] > 0]
+        for i, r in enumerate(f.itertuples(index=False), 2):
+            ws.cell(i, 1, int(r[0]))
+            ws.cell(i, 2, r[1])
+            ws.cell(i, 3, int(r[2]))
+            ws.cell(i, 4, int(r[3]))
+        ws.auto_filter.ref = f"A1:D{len(f) + 1}"
+    ws.freeze_panes = "A2"
+
+
 def excel_cd(res: Resultado, p: Parametros) -> bytes:
     wb = Workbook()
     ws = wb.active
@@ -150,6 +172,7 @@ def excel_cd(res: Resultado, p: Parametros) -> bytes:
         ws.conditional_formatting.add(f"E{ini + 1}:E{fin}", CellIsRule(operator="greaterThan", formula=["0"],
                                       fill=F_ROJO, font=Font(bold=True, color=ROJO)))
     ws.freeze_panes = "A8"
+    _hoja_forzados(wb, res.distribucion)
     _hoja(wb, "DISTRIBUCIÓN", res.distribucion, "DISTRIBUCIÓN A GRABAR",
           f"Origen → local destino · estadístico · cantidad. Ningún local supera {p.dias_max:g} días de inventario.")
     _hoja(wb, "SOBRANTE", res.pendientes, "UNIDADES SIN ASIGNAR",

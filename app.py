@@ -20,7 +20,7 @@ from portal import menu_apps
 
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
-VERSION_MOTOR = "2026-11-06.2"
+VERSION_MOTOR = "2026-11-06.3"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
 

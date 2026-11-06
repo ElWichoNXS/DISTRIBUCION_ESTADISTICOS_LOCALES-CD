@@ -157,3 +157,20 @@ def test_consumo_mensual_desde_export_con_encabezado(tmp_path):
     assert set(cm["estadistico"]) == {247239000}
     assert v[201] == 1                                    # (30 + 31) ÷ (30 + 31 días)
     assert round(v[421], 4) == round(30 / 61, 4)          # sin consumo en septiembre cuenta como 0
+
+
+def test_excel_cd_hoja_forzados():
+    import io
+    import openpyxl
+    from exportar import excel_cd
+    p = d.Parametros(dias_max=10)
+    res = d.distribuir_cd(BASE, d.leer_mover_cd(D / "mover_cd.csv"), p)
+    wb = openpyxl.load_workbook(io.BytesIO(excel_cd(res, p)))
+    assert wb.sheetnames[:3] == ["RESUMEN", "FORZADOS", "DISTRIBUCIÓN"]
+    ws = wb["FORZADOS"]
+    filas = list(ws.iter_rows(values_only=True))
+    assert filas[0] == ("Estadístico", "Descripción", "Local Destino", "Cantidad")
+    assert len(filas) - 1 == len(res.distribucion)
+    assert sum(f[3] for f in filas[1:]) == res.resumen["und_asignadas"]
+    cant = [f[3] for f in filas[1:]]
+    assert cant == sorted(cant, reverse=True)            # de mayor a menor por estadístico
