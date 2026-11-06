@@ -120,25 +120,31 @@ def _grafico_barras(ws, titulo, fila_h, fila_fin, col_cat, cols_val, colores, an
     ws.add_chart(ch, ancla)
 
 
-def _hoja_forzados(wb, dist: pd.DataFrame):
-    """Hoja FORZADOS: solo Estadístico, Descripción, Local Destino y Cantidad, desde la fila 1 (lista para copiar)."""
+def _hoja_forzados(wb, dist: pd.DataFrame, con_origen: bool = False):
+    """
+    Hoja FORZADOS: solo lo que hay que transferir, desde la fila 1 (lista para copiar).
+    Módulo 1: Estadístico, Descripción, Local Destino, Cantidad.
+    Módulo 2: Local Origen, Estadístico, Descripción, Local Destino, Cantidad (consolidado y ordenado por origen).
+    """
     ws = wb.create_sheet("FORZADOS")
-    cols = ["Estadístico", "Descripción", "Local Destino", "Cantidad"]
-    for j, (h, ancho) in enumerate(zip(cols, [14, 42, 14, 11]), 1):
+    cols = (["Local Origen"] if con_origen else []) + ["Estadístico", "Descripción", "Local Destino", "Cantidad"]
+    anchos = {"Local Origen": 13, "Estadístico": 14, "Descripción": 42, "Local Destino": 14, "Cantidad": 11}
+    for j, h in enumerate(cols, 1):
         c = ws.cell(1, j, h)
         c.fill = PatternFill("solid", fgColor=ROJO_OSC)
         c.font = Font(bold=True, color="FFFFFF")
         c.alignment = Alignment(horizontal="center")
-        ws.column_dimensions[get_column_letter(j)].width = ancho
+        ws.column_dimensions[get_column_letter(j)].width = anchos[h]
     if len(dist):
         f = dist[cols].copy()
         f = f[f["Cantidad"] > 0]
-        for i, r in enumerate(f.itertuples(index=False), 2):
-            ws.cell(i, 1, int(r[0]))
-            ws.cell(i, 2, r[1])
-            ws.cell(i, 3, int(r[2]))
-            ws.cell(i, 4, int(r[3]))
-        ws.auto_filter.ref = f"A1:D{len(f) + 1}"
+        if con_origen:
+            f = (f.groupby(["Local Origen", "Estadístico", "Descripción", "Local Destino"], as_index=False, sort=False)["Cantidad"].sum()
+                 .sort_values(["Local Origen", "Estadístico", "Cantidad"], ascending=[True, True, False], kind="stable"))
+        for i, r in enumerate(f[cols].itertuples(index=False), 2):
+            for j, v in enumerate(r, 1):
+                ws.cell(i, j, v if cols[j - 1] == "Descripción" else int(v))
+        ws.auto_filter.ref = f"A1:{get_column_letter(len(cols))}{len(f) + 1}"
     ws.freeze_panes = "A2"
 
 
@@ -241,6 +247,7 @@ def excel_locales(res: Resultado, p: Parametros) -> bytes:
         for c in range(aux_c, aux_c + 4):
             ws.column_dimensions[get_column_letter(c)].hidden = True
     ws.freeze_panes = "A8"
+    _hoja_forzados(wb, res.distribucion, con_origen=True)
     _hoja(wb, "DISTRIBUCIÓN", res.distribucion, "TRASPASOS ENTRE LOCALES A GRABAR",
           f"Local origen → local destino. Prioridad: mismo supervisor, luego mismo gerente. Ningún destino supera {p.dias_max:g} días.")
     _hoja(wb, "PENDIENTE MANUAL", res.pendientes, "PENDIENTE DE ASIGNACIÓN MANUAL",

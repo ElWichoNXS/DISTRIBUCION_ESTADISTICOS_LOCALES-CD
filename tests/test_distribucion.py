@@ -174,3 +174,21 @@ def test_excel_cd_hoja_forzados():
     assert sum(f[3] for f in filas[1:]) == res.resumen["und_asignadas"]
     cant = [f[3] for f in filas[1:]]
     assert cant == sorted(cant, reverse=True)            # de mayor a menor por estadístico
+
+
+def test_excel_locales_hoja_forzados_con_origen():
+    import io
+    import openpyxl
+    import pandas as pd
+    from exportar import excel_locales
+    p = d.Parametros(dias_max=10)
+    mov = pd.DataFrame({"estadistico": [111, 111], "origen": [7, 2], "cantidad": [40, 5], "supervisor": ["sup.a1", "sup.a1"],
+                        "gerente": ["ger.a", "ger.a"], "descripcion_mov": ["", ""]})
+    res = d.redistribuir_locales(BASE, mov, p)
+    wb = openpyxl.load_workbook(io.BytesIO(excel_locales(res, p)))
+    assert wb.sheetnames[:3] == ["RESUMEN", "FORZADOS", "DISTRIBUCIÓN"]
+    filas = list(wb["FORZADOS"].iter_rows(values_only=True))
+    assert filas[0] == ("Local Origen", "Estadístico", "Descripción", "Local Destino", "Cantidad")
+    assert sum(f[4] for f in filas[1:]) == res.resumen["nivel_sup"] + res.resumen["nivel_ger"]
+    origenes = [f[0] for f in filas[1:]]
+    assert origenes == sorted(origenes)                  # ordenado por local de origen
