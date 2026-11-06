@@ -18,6 +18,19 @@ from exportar import excel_cd, excel_locales
 from plantillas import plantilla_cd, plantilla_locales
 from portal import menu_apps
 
+# Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
+# (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
+VERSION_MOTOR = "2026-11-06.2"
+if getattr(d, "VERSION", None) != VERSION_MOTOR:
+    import importlib
+
+    import exportar
+    import plantillas
+    for _m in (d, exportar, plantillas):
+        importlib.reload(_m)
+    from exportar import excel_cd, excel_locales  # noqa: F811
+    from plantillas import plantilla_cd, plantilla_locales  # noqa: F811
+
 F_MES = "Consumo del mes anterior (archivo)"
 F_PRON = "Pronóstico diario del BI"
 F_ACU = "CONSUMOS ACU"
