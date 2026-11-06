@@ -119,3 +119,41 @@ def test_venta_diaria_consumos_acu_dividido_dias():
     assert prep.loc[3, "venta_diaria"] == 6 / 3         # CONSUMOS ACU 6 ÷ 3 días
     p.dias_consumo_acu = 6
     assert d.preparar(BASE, p).set_index("local").loc[3, "venta_diaria"] == 1
+
+
+def test_consumo_mes_anterior_dividido_dias_del_mes():
+    cm = d.consumo_diario(d.leer_consumo_mensual(D / "consumo_mensual.csv"))
+    v = cm.set_index("local")["venta_diaria"]
+    assert v[1] == 2 and v[3] == 1 and v[4] == 3          # octubre ÷ 31 días
+    assert cm["periodo"].iloc[0] == "Oct-2026 ÷ 31 días"
+    prep = d.preparar(BASE, d.Parametros(dias_max=10, fuente_venta="mensual"), cm).set_index("local")
+    assert prep.loc[1, "venta_diaria"] == 2
+    assert prep.loc[5, "venta_diaria"] == 0               # no vendió en el mes → no recibe
+    assert prep.loc[5, "motivo_no_recibe"] == "SIN VENTA"
+    # capacidad L1 = 10 días × 2 − 0 = 20; con el pronóstico (1/día) era 10
+    assert prep.loc[1, "capacidad"] == 20
+    res = d.distribuir_cd(BASE, d.leer_mover_cd(D / "mover_cd.csv"), d.Parametros(dias_max=10, fuente_venta="mensual"), cm)
+    assert set(res.distribucion["Local Destino"]) <= {1, 3, 4}
+    assert (res.distribucion["Fuente Venta"] == "Consumo Oct-2026 ÷ 31 días").all()
+
+
+def test_consumo_mensual_desde_export_con_encabezado(tmp_path):
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Iproduct"])
+    ws.append(["Generado el: 6th November 2026 / Desde: 2026-09 hasta: 2026-10 / Estadístico: COLA INCA KOLA 900 ML - 247239000"])
+    ws.append([])
+    ws.append([None, None, None, 91])
+    ws.append([])
+    ws.append(["Cod Sucursal", "Desc Sucursal", "Mes", "Consumo Unid"])
+    ws.append([201, "LLANO GRANDE", "2026-09", 30])
+    ws.append([201, "LLANO GRANDE", "2026-10", 31])
+    ws.append([421, "ESMERALDAS", "2026-10", 30])
+    f = tmp_path / "export.xlsx"
+    wb.save(f)
+    cm = d.consumo_diario(d.leer_consumo_mensual(f))
+    v = cm.set_index("local")["venta_diaria"]
+    assert set(cm["estadistico"]) == {247239000}
+    assert v[201] == 1                                    # (30 + 31) ÷ (30 + 31 días)
+    assert round(v[421], 4) == round(30 / 61, 4)          # sin consumo en septiembre cuenta como 0

@@ -15,7 +15,7 @@ Mueve el inventario de un local de salida a otros locales con esta prioridad:
 ## Cómo decide
 | Concepto | Cálculo |
 |---|---|
-| Venta diaria | Pronóstico diario del BI (promedio de las columnas de fecha). Si falta, `CONSUMOS ACU ÷ 3` (igual que `DIAS STOCK SUC`). Configurable. |
+| Venta diaria | A elegir: **consumo del mes anterior** (export del BI con `Cod Sucursal`, `Mes`, `Consumo Unid`) ÷ días de ese mes — p. ej. octubre ÷ 31; **pronóstico diario** del BI (promedio de las columnas de fecha); o `CONSUMOS ACU ÷ días`. Si un estadístico no tiene dato en la fuente elegida, se usa el pronóstico. |
 | Stock actual | `INV NETO + ROQ_LTC + ROQ_PTL` (INV NETO ya incluye el tránsito) |
 | Capacidad | `días máx × venta diaria − stock actual` |
 | Reparto | **Nivelación**: se entrega de a una unidad (o un `EMPAQUE`, si se activa el redondeo) al local con menos días de inventario, hasta repartir todo o hasta que todos lleguen a los días máximos. |
@@ -29,6 +29,7 @@ locales **sin venta** y los que ya tienen los días máximos cubiertos. En el m�
 | Base de locales habilitados (BI) | `GERENTE`, `SUPERV.`, `BODEGA`, `# Local`, `DESIGNACION`, `ESTADISTICO`, `DESCRIPCION`, `CONSUMOS ACU`, `INV NETO`, `ROQ_LTC`, `ROQ_PTL`, `Uni Exhibición`, `EMPAQUE` y columnas de pronóstico por fecha (`04/NOV/2026`…) |
 | Módulo 1 · Inventario a mover | `BODEGA`, `# ESTADIST` (o `Estadístico`), cantidad en `FISICO_WH` (o `Cantidad`) |
 | Módulo 2 · Inventario a mover | `# Local` (o `Local de salida`), `ESTADISTICO`, cantidad en `Cantidad` o, si no existe, `INV NETO`; opcional `SUPERV.` y `GERENTE` |
+| Consumo del mes anterior (opcional) | Export del BI: `Cod Sucursal`, `Mes` (`2026-10`), `Consumo Unid`; el estadístico se lee del encabezado del reporte o de una columna `Estadístico`. Se pueden subir varios archivos. Un local que no aparece en el mes cuenta con venta 0. |
 | Maestro de locales (opcional) | `# Local`, `SUPERV.`, `GERENTE`, `DESIGNACION` |
 
 ### Plantillas

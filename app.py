@@ -18,6 +18,9 @@ from exportar import excel_cd, excel_locales
 from plantillas import plantilla_cd, plantilla_locales
 from portal import menu_apps
 
+F_MES = "Consumo del mes anterior (archivo)"
+F_PRON = "Pronóstico diario del BI"
+F_ACU = "CONSUMOS ACU"
 st.set_page_config(page_title="Distribución por días de inventario", page_icon="🚚", layout="wide")
 menu_apps("Distribución próximos a vencer")
 aplicar_estilo()
@@ -75,9 +78,11 @@ with st.sidebar:
     dias_max = st.number_input("Días máximos de inventario en el local", min_value=1.0, max_value=180.0, value=15.0,
                                step=1.0, help="Ningún local queda con más de estos días de inventario después del traspaso.")
     with st.expander("Venta diaria y stock", expanded=False):
-        fuente = st.radio("Venta diaria", ["Pronóstico diario del BI", "CONSUMOS ACU"], index=0,
-                          help="Pronóstico: promedio de las columnas de fecha del BI (si un local no tiene pronóstico, "
-                               "usa CONSUMOS ACU ÷ días). CONSUMOS ACU: venta diaria = CONSUMOS ACU ÷ los días de abajo.")
+        fuente = st.radio("Venta diaria", [F_MES, F_PRON, F_ACU], index=0,
+                          help="Mes anterior: consumo acumulado del archivo de consumo ÷ días de ese mes (ej. octubre ÷ 31). "
+                               "Pronóstico: promedio de las columnas de fecha del BI. "
+                               "CONSUMOS ACU: CONSUMOS ACU ÷ los días de abajo. "
+                               "Si un estadístico no tiene dato en la fuente elegida, se usa el pronóstico (y si falta, CONSUMOS ACU).")
         dias_acu = st.number_input("CONSUMOS ACU representa (días)", min_value=1.0, value=3.0, step=1.0,
                                    help="Venta diaria = CONSUMOS ACU ÷ este número. Con 3 coincide con DIAS STOCK SUC del BI.")
         st.caption("Stock del local = INV NETO + ROQ LTC + ROQ PTL (INV NETO ya incluye el tránsito).")
@@ -88,7 +93,7 @@ with st.sidebar:
                                      help="Usa la columna BODEGA de la base para cruzar con la bodega del inventario a mover.")
     with st.expander("📘 Cómo decide el programa"):
         st.markdown(
-            "- **Venta diaria** del local según el parámetro elegido.\n"
+            "- **Venta diaria** del local según el parámetro elegido (mes anterior: consumo del mes ÷ días del mes).\n"
             "- **Stock actual** = INV NETO + ROQ LTC + ROQ PTL (INV NETO ya incluye el tránsito).\n"
             "- **Capacidad** = días máx × venta diaria − stock actual.\n"
             "- **Nivelación:** se entrega de a una unidad (o empaque) al local con **menos días de inventario**, "
@@ -96,7 +101,7 @@ with st.sidebar:
             "- Un local **sin venta** no recibe.\n"
             "- **Módulo 2:** primero locales del **mismo supervisor**, luego del **mismo gerente**; lo que no cabe queda "
             "**pendiente manual** con sugerencias de otros gerentes.")
-params = d.Parametros(dias_max=dias_max, fuente_venta="pronostico" if fuente.startswith("Pron") else "consumo",
+params = d.Parametros(dias_max=dias_max, fuente_venta={F_MES: "mensual", F_PRON: "pronostico", F_ACU: "consumo"}[fuente],
                       dias_consumo_acu=dias_acu,
                       redondear_empaque=empaque, filtrar_bodega=filtrar_bodega)
 
@@ -238,6 +243,30 @@ with c2:
         estado.caption(f"✅ {len(mov)} registros · {n(mov['cantidad'].sum())} unidades a mover · "
                        f"{mov['estadistico'].nunique()} estadísticos")
 
+# ---- consumo del mes anterior (export del BI, uno o varios archivos)
+consumo = None
+if params.fuente_venta == "mensual":
+    seccion("3) Consumo del mes anterior",
+            "Export del BI con 'Cod Sucursal', 'Mes' y 'Consumo Unid'. Puedes subir varios archivos (uno por estadístico).")
+    f_cons = st.file_uploader("Archivos de consumo mensual", type=["xlsx", "xls", "csv"], key="consumo",
+                              accept_multiple_files=True, label_visibility="collapsed")
+    partes, errores = [], []
+    for f in f_cons or []:
+        try:
+            partes.append(leer("leer_consumo_mensual", f.getvalue(), f.name, None))
+        except Exception as e:
+            errores.append(f"{f.name}: {e}")
+    for e in errores:
+        st.error(e)
+    if partes:
+        mensual = pd.concat(partes).drop_duplicates(["local", "estadistico", "mes"], keep="last")
+        consumo = d.consumo_diario(mensual)
+        per = consumo.drop_duplicates("estadistico")[["estadistico", "periodo"]]
+        st.caption("✅ " + " · ".join(f"{r.estadistico}: {r.periodo}" for r in per.itertuples()) +
+                   f" · {consumo['local'].nunique()} locales")
+    else:
+        nota("Sube el export de consumo del mes anterior. Mientras no lo subas, se usa el <b>pronóstico diario del BI</b>.", "warn")
+
 if base is None or mov is None or not len(mov):
     nota("Sube la base de locales habilitados y el inventario a mover (o digítalo) para ver la distribución y descargar el Excel. "
          "Ajusta los <b>días máximos</b> en la barra lateral.")
@@ -248,18 +277,23 @@ if base is None or mov is None or not len(mov):
 # Cálculo
 # ----------------------------------------------------------------------
 @st.cache_data(show_spinner="Calculando distribución…", max_entries=6)
-def calcular(es_m1, base, mov, p_tuple):
+def calcular(es_m1, base, mov, p_tuple, consumo):
     p = d.Parametros(*p_tuple)
     if es_m1:
-        res = d.distribuir_cd(base, mov, p)
+        res = d.distribuir_cd(base, mov, p, consumo)
         return res, excel_cd(res, p)
-    res = d.redistribuir_locales(base, mov, p)
+    res = d.redistribuir_locales(base, mov, p, consumo)
     return res, excel_locales(res, p)
 
 
 p_tuple = (params.dias_max, params.fuente_venta, params.dias_consumo_acu,
            params.redondear_empaque, params.filtrar_bodega)
-res, excel = calcular(es_m1, base, mov, p_tuple)
+if consumo is not None:
+    sin_consumo = sorted(set(mov["estadistico"]) - set(consumo["estadistico"]))
+    if sin_consumo:
+        st.warning(f"Sin archivo de consumo mensual para {len(sin_consumo)} estadístico(s): "
+                   f"{', '.join(map(str, sin_consumo[:12]))}{'…' if len(sin_consumo) > 12 else ''}. Para esos se usa el pronóstico del BI.")
+res, excel = calcular(es_m1, base, mov, p_tuple, consumo)
 r = res.resumen
 dist = res.distribucion
 

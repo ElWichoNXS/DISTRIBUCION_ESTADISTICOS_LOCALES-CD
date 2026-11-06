@@ -249,25 +249,95 @@ def completar_responsables(mov: pd.DataFrame, maestro: pd.DataFrame) -> pd.DataF
     return mov
 
 
+# ------------------------------------------------------------------ consumo mensual (export del BI)
+
+MESES = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+
+
+def leer_consumo_mensual(archivo, hoja=None) -> pd.DataFrame:
+    """
+    Export del BI con el consumo acumulado por sucursal y mes ('Cod Sucursal', 'Mes', 'Consumo Unid').
+    El estadístico se toma de una columna 'Estadístico' o, si no existe, del encabezado del reporte
+    ('Estadístico: COLA INCA KOLA 900 ML - 247239000'). Devuelve una fila por local + estadístico + mes.
+    """
+    raw = leer_tabla(archivo, hoja)
+    df = _con_encabezado(raw, ["SUCURSAL", "CONSUMO"])
+    c = lambda *o: _col(df, *o)
+    loc, mes, cons = c("Cod Sucursal", "COD SUCURSAL", "# Local", "LOCAL"), c("Mes", "MES", "PERIODO"), \
+        c("Consumo Unid", "CONSUMO UNID", "CONSUMO", "CONSUMO UNIDADES")
+    if loc is None or mes is None or cons is None:
+        raise ValueError("El archivo de consumo debe tener 'Cod Sucursal', 'Mes' y 'Consumo Unid'.")
+    est_col = c("ESTADISTICO", "ESTADÍSTICO", "# ESTADIST")
+    if est_col:
+        est = df[est_col].map(codigo)
+    else:
+        texto = " ".join(str(v) for v in raw.head(10).values.ravel() if _texto(v))
+        m = re.search(r"Estad[ií]stico:.*?(\d{6,})", texto)
+        if not m:
+            raise ValueError("No encontré el estadístico: agrega una columna 'Estadístico' o usa el export con encabezado.")
+        est = int(m.group(1))
+    out = pd.DataFrame({"local": df[loc].map(codigo), "estadistico": est,
+                        "mes": df[mes].map(_texto).str.slice(0, 7), "consumo": df[cons].map(num)})
+    out = out.dropna(subset=["local", "estadistico"])
+    out = out[out["mes"].str.match(r"^\d{4}-\d{2}$")]
+    out["local"] = out["local"].astype(int)
+    out["estadistico"] = out["estadistico"].astype(int)
+    return out.reset_index(drop=True)
+
+
+def consumo_diario(mensual: pd.DataFrame) -> pd.DataFrame:
+    """
+    Venta diaria por local + estadístico = consumo acumulado ÷ días de los meses del archivo.
+    Ej.: octubre 2026 → ÷ 31. Si vienen varios meses, se suman consumos y días.
+    """
+    import calendar
+    if mensual is None or not len(mensual):
+        return pd.DataFrame(columns=["local", "estadistico", "consumo", "dias", "venta_diaria", "periodo"])
+    m = mensual.groupby(["local", "estadistico", "mes"], as_index=False)["consumo"].sum()
+    meses_item = m.groupby("estadistico")["mes"].apply(lambda s: sorted(set(s)))
+    dias_item = meses_item.map(lambda ms: sum(calendar.monthrange(int(x[:4]), int(x[5:]))[1] for x in ms))
+    periodo = meses_item.map(lambda ms: ", ".join(f"{MESES[int(x[5:])]}-{x[:4]}" for x in ms)
+                             + f" ÷ {sum(calendar.monthrange(int(x[:4]), int(x[5:]))[1] for x in ms)} días")
+    out = m.groupby(["local", "estadistico"], as_index=False)["consumo"].sum()
+    out["dias"] = out["estadistico"].map(dias_item)
+    out["venta_diaria"] = out["consumo"].clip(lower=0) / out["dias"]
+    out["periodo"] = out["estadistico"].map(periodo)
+    return out
+
+
 # ------------------------------------------------------------------ cálculo
 
 
 @dataclass
 class Parametros:
     dias_max: float = 15.0
-    fuente_venta: str = "pronostico"     # "pronostico" | "consumo"
+    fuente_venta: str = "pronostico"     # "pronostico" | "consumo" | "mensual"
     dias_consumo_acu: float = 3.0       # cuántos días representa CONSUMOS ACU
     redondear_empaque: bool = False
     filtrar_bodega: bool = True         # Módulo 1: solo locales abastecidos por la bodega de salida
 
 
-def preparar(base: pd.DataFrame, p: Parametros) -> pd.DataFrame:
+def preparar(base: pd.DataFrame, p: Parametros, consumo_mensual: pd.DataFrame | None = None) -> pd.DataFrame:
     b = base.copy()
     por_consumo = b["consumo_acu"] / (p.dias_consumo_acu or 1)
-    if p.fuente_venta == "pronostico":
-        b["venta_diaria"] = b["pronostico"].where(b["pronostico"].notna(), por_consumo)
-    else:
+    por_pronostico = b["pronostico"].where(b["pronostico"].notna(), por_consumo)
+    b["fuente_venta"] = "Pronóstico BI"
+    b.loc[b["pronostico"].isna(), "fuente_venta"] = f"CONSUMOS ACU ÷ {p.dias_consumo_acu:g}"
+    if p.fuente_venta == "consumo":
         b["venta_diaria"] = por_consumo
+        b["fuente_venta"] = f"CONSUMOS ACU ÷ {p.dias_consumo_acu:g}"
+    elif p.fuente_venta == "mensual" and consumo_mensual is not None and len(consumo_mensual):
+        # Consumo del mes anterior ÷ días del mes. Los estadísticos que no vienen en el archivo usan el pronóstico.
+        diario = consumo_mensual.set_index(["local", "estadistico"])["venta_diaria"]
+        cubiertos = set(consumo_mensual["estadistico"])
+        etiqueta = consumo_mensual.drop_duplicates("estadistico").set_index("estadistico")["periodo"]
+        clave = pd.MultiIndex.from_arrays([b["local"], b["estadistico"]])
+        mensual = pd.Series(diario.reindex(clave).values, index=b.index)
+        en_archivo = b["estadistico"].isin(cubiertos)
+        b["venta_diaria"] = por_pronostico.where(~en_archivo, mensual.fillna(0))   # local sin consumo en el mes = 0
+        b.loc[en_archivo, "fuente_venta"] = "Consumo " + b.loc[en_archivo, "estadistico"].map(etiqueta)
+    else:
+        b["venta_diaria"] = por_pronostico
     b["venta_diaria"] = b["venta_diaria"].fillna(0).clip(lower=0)
     # INV NETO ya considera el tránsito; se suma lo que ya está pedido (ROQ LTC + ROQ PTL)
     b["stock"] = (b["inv_neto"] + b["roq_ltc"].clip(lower=0) + b["roq_ptl"].clip(lower=0)).clip(lower=0)
@@ -329,7 +399,8 @@ def _fila_destino(r, asignado, previo, dias_max):
     stock_final = r.stock + previo + asignado
     return {
         "Local Destino": r.local, "Nombre Destino": r.designacion.title(), "Supervisor Destino": r.supervisor,
-        "Gerente Destino": r.gerente, "Venta Diaria": round(v, 3), "Stock Actual": r.stock,
+        "Gerente Destino": r.gerente, "Venta Diaria": round(v, 3), "Fuente Venta": getattr(r, "fuente_venta", ""),
+        "Stock Actual": r.stock,
         "Días Actuales": round(r.stock / v, 1) if v > 0 else None,
         "Cantidad": asignado,
         "Stock Final": stock_final, "Días Finales": round(stock_final / v, 1) if v > 0 else None,
@@ -337,8 +408,9 @@ def _fila_destino(r, asignado, previo, dias_max):
     }
 
 
-def distribuir_cd(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros) -> Resultado:
-    b = preparar(base, p)
+def distribuir_cd(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
+                  consumo_mensual: pd.DataFrame | None = None) -> Resultado:
+    b = preparar(base, p, consumo_mensual)
     filas, items, nocons = [], [], []
     for it in mover.itertuples(index=False):
         g, q = it.estadistico, int(it.cantidad)
@@ -359,7 +431,7 @@ def distribuir_cd(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros) -> Res
         for r in bi[bi["motivo_no_recibe"] != ""].itertuples(index=False):
             nocons.append({"Estadístico": g, "Descripción": desc, "Local": r.local, "Nombre": r.designacion.title(),
                            "Supervisor": r.supervisor, "Gerente": r.gerente, "Motivo": r.motivo_no_recibe,
-                           "Venta Diaria": round(r.venta_diaria, 3), "Stock Actual": r.stock,
+                           "Venta Diaria": round(r.venta_diaria, 3), "Fuente Venta": r.fuente_venta, "Stock Actual": r.stock,
                            "Días Actuales": round(r.dias_actuales, 1) if pd.notna(r.dias_actuales) else None})
         asignado = sum(asign.values())
         cap_total = int(cand["capacidad"].sum()) if len(cand) else 0
@@ -415,8 +487,9 @@ NIVEL_GER = "2. Mismo gerente"
 NIVEL_MAN = "3. Pendiente manual"
 
 
-def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros) -> Resultado:
-    b = preparar(base, p)
+def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
+                         consumo_mensual: pd.DataFrame | None = None) -> Resultado:
+    b = preparar(base, p, consumo_mensual)
     origenes_item = mover.groupby("estadistico")["origen"].apply(set).to_dict()
     resp = maestro_locales(base).set_index("local")
     mov = mover.reset_index(drop=True).copy()
@@ -504,7 +577,7 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros)
         for r in b[(b["estadistico"] == g) & (b["motivo_no_recibe"] != "")].itertuples(index=False):
             nocons.append({"Estadístico": g, "Descripción": r.descripcion, "Local": r.local, "Nombre": r.designacion.title(),
                            "Supervisor": r.supervisor, "Gerente": r.gerente, "Motivo": r.motivo_no_recibe,
-                           "Venta Diaria": round(r.venta_diaria, 3), "Stock Actual": r.stock,
+                           "Venta Diaria": round(r.venta_diaria, 3), "Fuente Venta": r.fuente_venta, "Stock Actual": r.stock,
                            "Días Actuales": round(r.dias_actuales, 1) if pd.notna(r.dias_actuales) else None})
     sm = lambda c: int(por_item[c].sum()) if len(por_item) else 0
     res = {"origenes": len(por_item), "und_mover": sm("Cantidad a Mover"), "nivel_sup": sm(NIVEL_SUP),

@@ -21,7 +21,7 @@ BORDE = Border(left=thin, right=thin, top=thin, bottom=thin)
 F_ROJO = PatternFill("solid", fgColor="F8CBAD")
 ANCHOS = {"Descripción": 40, "Observación": 52, "Motivo": 52, "Sugerencia (otros gerentes · capacidad)": 60,
           "Nombre Destino": 20, "Nombre Origen": 20, "Nombre": 20, "Supervisor Destino": 18, "Gerente Destino": 18,
-          "Supervisor Origen": 18, "Gerente Origen": 18, "Supervisor": 18, "Gerente": 18, "Nivel": 20}
+          "Supervisor Origen": 18, "Gerente Origen": 18, "Supervisor": 18, "Gerente": 18, "Nivel": 20, "Fuente Venta": 22}
 PCT = {"% Asignado"}
 TEXTO_IZQ = {"Descripción", "Observación", "Motivo", "Sugerencia (otros gerentes · capacidad)", "Nombre Destino",
              "Nombre Origen", "Nombre"}
@@ -67,11 +67,19 @@ def _hoja(wb, nombre, df, titulo, nota, color=ROJO_OSC):
     return ws
 
 
+def _fuente(p: Parametros) -> str:
+    if p.fuente_venta == "mensual":
+        return "consumo del mes anterior ÷ días del mes (archivo de consumo)"
+    if p.fuente_venta == "consumo":
+        return f"CONSUMOS ACU ÷ {p.dias_consumo_acu:g}"
+    return "pronóstico diario del BI"
+
+
 def _encabezado_resumen(ws, titulo, p: Parametros, kpis: list[tuple]):
     ws["A1"] = titulo
     ws["A1"].font = Font(bold=True, size=15, color=ROJO)
     ws["A2"] = (f"Generado {datetime.now():%d/%m/%Y %H:%M} · Días máx {p.dias_max:g} · "
-                f"Venta diaria: {'pronóstico diario del BI' if p.fuente_venta == 'pronostico' else f'CONSUMOS ACU ÷ {p.dias_consumo_acu:g}'}"
+                f"Venta diaria: {_fuente(p)}"
                 f" · Stock = INV NETO + ROQ LTC + ROQ PTL"
                 f" · {'Redondeo a múltiplos de EMPAQUE' if p.redondear_empaque else 'Unidades sueltas'}")
     ws["A2"].font = Font(italic=True, size=9, color="595959")
