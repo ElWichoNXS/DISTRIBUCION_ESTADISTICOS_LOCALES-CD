@@ -20,7 +20,7 @@ from portal import menu_apps
 
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
-VERSION_MOTOR = "2026-11-06.4"
+VERSION_MOTOR = "2026-11-06.5"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
 
@@ -290,13 +290,12 @@ if base is None or mov is None or not len(mov):
 # Cálculo
 # ----------------------------------------------------------------------
 @st.cache_data(show_spinner="Calculando distribución…", max_entries=6)
-def calcular(es_m1, base, mov, p_tuple, consumo):
+def calcular(es_m1, base, mov, p_tuple, consumo, version):
+    # `version` forma parte de la clave del caché: al actualizar el programa no se reutilizan resultados viejos.
     p = d.Parametros(*p_tuple)
     if es_m1:
-        res = d.distribuir_cd(base, mov, p, consumo)
-        return res, excel_cd(res, p)
-    res = d.redistribuir_locales(base, mov, p, consumo)
-    return res, excel_locales(res, p)
+        return d.distribuir_cd(base, mov, p, consumo)
+    return d.redistribuir_locales(base, mov, p, consumo)
 
 
 p_tuple = (params.dias_max, params.fuente_venta, params.dias_consumo_acu,
@@ -306,7 +305,9 @@ if consumo is not None:
     if sin_consumo:
         st.warning(f"Sin archivo de consumo mensual para {len(sin_consumo)} estadístico(s): "
                    f"{', '.join(map(str, sin_consumo[:12]))}{'…' if len(sin_consumo) > 12 else ''}. Para esos se usa el pronóstico del BI.")
-res, excel = calcular(es_m1, base, mov, p_tuple, consumo)
+res = calcular(es_m1, base, mov, p_tuple, consumo, VERSION_MOTOR)
+# El Excel se genera siempre con la versión actual del exportador (no se guarda en caché).
+excel = excel_cd(res, params) if es_m1 else excel_locales(res, params)
 r = res.resumen
 dist = res.distribucion
 
