@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import distribucion as d
+import estilo as estilo_mod
 from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, ROJO, ROJO_OSC, alto_tabla, aplicar_estilo, encabezado, grafico,
                     kpis, n, nota, pct, seccion)
 from exportar import excel_cd, excel_locales
@@ -20,7 +21,7 @@ from portal import menu_apps
 
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
-VERSION_MOTOR = "2026-11-10.4"
+VERSION_MOTOR = "2026-11-10.5"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
 
@@ -139,6 +140,7 @@ with st.sidebar:
                               help="Usa la columna EMPAQUE de la base: cada local recibe empaques completos; puede quedar sobrante.")
         filtrar_bodega = st.checkbox("Solo locales de la bodega de salida", value=True,
                                      help="Usa la columna BODEGA de la base para cruzar con la bodega del inventario a mover.")
+    st.caption("🌙 **Modo oscuro / claro:** menú ⋮ (arriba a la derecha) → *Settings* → *Theme*.")
     with st.expander("📘 Cómo decide el programa"):
         st.markdown(
             "- **Venta diaria** del local según el parámetro elegido (mes anterior: consumo del mes ÷ días del mes).\n"
@@ -206,10 +208,6 @@ with c2:
                     "Usa la plantilla (Estadístico, Local de salida, Cantidad, Supervisor, Gerente) o un archivo del BI "
                     "con '# Local', 'ESTADISTICO' e 'INV NETO'.", ["PLANTILLA", "MOVER", "INV"])
     estado = st.empty()
-    st.markdown("""<style>.st-key-plantilla button { background:#FFFFFF !important; color:#1F2933 !important;
-        border:1px solid #D3D8DF !important; box-shadow:none !important; font-weight:600 !important; }
-        .st-key-plantilla button:hover { border-color:#E30613 !important; color:#E30613 !important; }
-        .st-key-plantilla button p { color:inherit !important; }</style>""", unsafe_allow_html=True)
     st.container(key="plantilla").download_button(
         "📄 Descargar plantilla para llenar",
         data=plantilla_cd() if es_m1 else plantilla_locales(),
@@ -455,7 +453,7 @@ if es_m1:
             h1, h2 = st.columns(2)
             with h1:
                 gg = dist.groupby("Gerente Destino", as_index=False)["Cantidad"].sum().rename(columns={"Cantidad": "Unidades"})
-                barras_apiladas(gg, "Gerente Destino", ["Unidades"], ["#52606D"], "Unidades por gerente",
+                barras_apiladas(gg, "Gerente Destino", ["Unidades"], [estilo_mod.NEUTRO], "Unidades por gerente",
                                 "Cómo se reparte el inventario entre las gerencias.")
             with h2:
                 ss = dist.groupby("Supervisor Destino", as_index=False)["Cantidad"].sum().rename(columns={"Cantidad": "Unidades"})
