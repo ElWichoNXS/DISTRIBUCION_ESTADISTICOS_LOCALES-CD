@@ -23,7 +23,7 @@ Conceptos (por local + estadístico):
 from __future__ import annotations
 
 # Cambiar en cada actualización junto con VERSION_MOTOR de app.py (fuerza a recargar el motor en Streamlit Cloud).
-VERSION = "2026-11-10.6"
+VERSION = "2026-11-10.9"
 
 import heapq
 import io
