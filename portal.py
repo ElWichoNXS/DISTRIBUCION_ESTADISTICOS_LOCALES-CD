@@ -9,7 +9,7 @@ APPS = [
     # (nombre, ícono, dirección en Streamlit Cloud)
     ("Verificación de traspasos", "📦", "https://verificaciondesolicitudesagotados-kkf5f8ke8v4c9ovjzrv6nk.streamlit.app/"),
     ("Min / Max por local", "📊", "https://elwichonxs-abasto-kbt59qziqyexuqjhmhyan6.streamlit.app/"),
-    ("Distribución próximos a vencer", "🚚", ""),  # pendiente: pegar aquí la dirección cuando se publique
+    ("Distribución de estadísticos", "🚚", ""),  # pendiente: pegar aquí la dirección cuando se publique
 ]
 
 

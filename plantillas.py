@@ -85,7 +85,7 @@ def _plantilla(columnas, ejemplos, titulo, instrucciones) -> bytes:
 
 
 def plantilla_cd() -> bytes:
-    return _plantilla(COLS_CD, EJ_CD, "PLANTILLA · DISTRIBUCIÓN CD A LOCALES (PRÓXIMOS A VENCER)", [
+    return _plantilla(COLS_CD, EJ_CD, "PLANTILLA · DISTRIBUCIÓN CD A LOCALES", [
         "1. Llena la hoja PLANTILLA: una fila por estadístico que sale del CD (las columnas rojas son obligatorias).",
         "2. La hoja EJEMPLO muestra cómo llenarla; no se lee al subir el archivo.",
         "3. Guarda el archivo y súbelo en el programa, en '2) Inventario a mover desde el CD'.",

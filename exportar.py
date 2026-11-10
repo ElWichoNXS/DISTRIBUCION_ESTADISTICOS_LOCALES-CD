@@ -153,7 +153,7 @@ def excel_cd(res: Resultado, p: Parametros) -> bytes:
     ws = wb.active
     ws.title = "RESUMEN"
     r = res.resumen
-    _encabezado_resumen(ws, "DISTRIBUCIÓN CD A LOCALES (PRÓXIMOS A VENCER)", p, [
+    _encabezado_resumen(ws, "DISTRIBUCIÓN CD A LOCALES", p, [
         ("Estadísticos", r["items"]), ("Und. a mover", r["und_mover"]), ("Und. asignadas", r["und_asignadas"]),
         ("Sobrante", r["und_sobrante"]), ("Traspasos", r["traspasos"]), ("Locales que reciben", r["locales"])])
     pi = res.por_item.copy()

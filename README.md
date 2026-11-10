@@ -1,9 +1,9 @@
-# Distribución por Días de Inventario
+# Distribución de estadísticos
 
 App en Streamlit con dos módulos para repartir inventario sin que ningún local supere los **días máximos de
 inventario** que definas.
 
-## Módulo 1 · Distribución CD a Locales (Próximos a Vencer)
+## Módulo 1 · Distribución CD a Locales
 Reparte las unidades que salen de una bodega entre los locales donde el producto está habilitado.
 
 ## Módulo 2 · Redistribución entre locales

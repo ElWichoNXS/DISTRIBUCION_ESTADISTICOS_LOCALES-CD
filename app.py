@@ -1,6 +1,6 @@
 """
-app.py  -  Distribución por días de inventario (Streamlit)
-Módulo 1: Distribución CD a Locales (Próximos a Vencer)
+app.py  -  Distribución de estadísticos (Streamlit)
+Módulo 1: Distribución CD a Locales
 Módulo 2: Redistribución entre locales (supervisor → gerente → manual)
 Ejecutar:  streamlit run app.py
 """
@@ -20,7 +20,7 @@ from portal import menu_apps
 
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
-VERSION_MOTOR = "2026-11-06.5"
+VERSION_MOTOR = "2026-11-10.1"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
 
@@ -34,11 +34,11 @@ if getattr(d, "VERSION", None) != VERSION_MOTOR:
 F_MES = "Consumo del mes anterior (archivo)"
 F_PRON = "Pronóstico diario del BI"
 F_ACU = "CONSUMOS ACU"
-st.set_page_config(page_title="Distribución por días de inventario", page_icon="🚚", layout="wide")
-menu_apps("Distribución próximos a vencer")
+st.set_page_config(page_title="Distribución de estadísticos", page_icon="🚚", layout="wide")
+menu_apps("Distribución de estadísticos")
 aplicar_estilo()
 
-M1 = "📦 Distribución CD a Locales (Próximos a Vencer)"
+M1 = "📦 Distribución CD a Locales"
 M2 = "🔁 Redistribución entre locales"
 ESC_NIVEL = alt.Scale(domain=[d.NIVEL_SUP, d.NIVEL_GER, d.NIVEL_MAN], range=[C_OK, C_ALT, C_EXT])
 
@@ -132,7 +132,7 @@ sub = ("Reparte el inventario de una bodega entre los locales habilitados según
 st.markdown(f"""
 <div class="hero">
   <div>
-    <h1>Distribución por Días de Inventario</h1>
+    <h1>Distribución de Estadísticos</h1>
     <p>{sub}</p>
   </div>
   <div class="pasos">

@@ -1,7 +1,7 @@
 """
 Motor de distribución por días de inventario.
 
-Módulo 1 · Distribución CD a Locales (Próximos a Vencer)
+Módulo 1 · Distribución CD a Locales
     Reparte las unidades de una bodega entre los locales habilitados sin superar
     los días máximos de inventario. Si no alcanza para todos, nivela: primero
     recibe el local con menos días de inventario.
@@ -23,7 +23,7 @@ Conceptos (por local + estadístico):
 from __future__ import annotations
 
 # Cambiar en cada actualización junto con VERSION_MOTOR de app.py (fuerza a recargar el motor en Streamlit Cloud).
-VERSION = "2026-11-06.5"
+VERSION = "2026-11-10.1"
 
 import heapq
 import io
