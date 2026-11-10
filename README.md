@@ -21,10 +21,10 @@ Lo que no cabe queda **pendiente de asignación manual**, con sugerencias de loc
 ## Cómo decide
 | Concepto | Cálculo |
 |---|---|
-| Venta diaria | A elegir: **consumo del mes anterior** (export del BI con `Cod Sucursal`, `Mes`, `Consumo Unid`) ÷ días de ese mes — p. ej. octubre ÷ 31; **pronóstico diario** del BI (promedio de las columnas de fecha); o `CONSUMOS ACU ÷ días`. Si un estadístico no tiene dato en la fuente elegida, se usa el pronóstico. |
+| Venta diaria | A elegir (por defecto **CONSUMOS ACU**): `CONSUMOS ACU ÷ días transcurridos del mes` — los días se calculan con el calendario 📅 a partir de la fecha de corte (por defecto hoy; 10/11 → 9 días) y también se pueden escribir; **consumo del mes anterior** (export del BI con `Cod Sucursal`, `Mes`, `Consumo Unid`) ÷ días de ese mes; o **pronóstico diario** del BI (promedio de las columnas de fecha). Si un estadístico no tiene dato en la fuente elegida, se usa el pronóstico. |
 | Stock actual | `INV NETO + ROQ_LTC + ROQ_PTL` (INV NETO ya incluye el tránsito) |
 | Capacidad | `días máx × venta diaria − stock actual` |
-| Reparto | **Nivelación**: se entrega de a una unidad (o un `EMPAQUE`, si se activa el redondeo) al local con menos días de inventario, hasta repartir todo o hasta que todos lleguen a los días máximos. |
+| Reparto | **Nivelación**: se entrega de a un `EMPAQUE` (redondeo activado por defecto) o de a una unidad al local con menos días de inventario, hasta repartir todo o hasta que todos lleguen a los días máximos. |
 
 La base ya viene filtrada con los locales habilitados, así que no se aplican exclusiones adicionales. No reciben:
 locales **sin venta** y los que ya tienen los días máximos cubiertos. En el módulo 2 tampoco recibe un local que sea origen del mismo estadístico.

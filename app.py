@@ -5,7 +5,7 @@ Módulo 2: Redistribución entre locales (supervisor → gerente → manual)
 Ejecutar:  streamlit run app.py
 """
 import io
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 
 import altair as alt
 import pandas as pd
@@ -20,7 +20,7 @@ from portal import menu_apps
 
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
-VERSION_MOTOR = "2026-11-10.2"
+VERSION_MOTOR = "2026-11-10.3"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
 
@@ -86,21 +86,51 @@ def subir(etiqueta, key, funcion, ayuda, preferidas=()):
 # ----------------------------------------------------------------------
 # Barra lateral: parámetros
 # ----------------------------------------------------------------------
+def hoy_ecuador() -> date:
+    """Fecha actual en Ecuador (el servidor de Streamlit Cloud está en UTC)."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/Guayaquil")).date()
+    except Exception:
+        return (datetime.now(timezone.utc) - timedelta(hours=5)).date()
+
+
+def dias_transcurridos(fecha: date) -> int:
+    """Días completos transcurridos del mes antes de la fecha (10/11 → 9). Mínimo 1."""
+    return max(1, fecha.day - 1)
+
+
+def _al_cambiar_fecha():
+    st.session_state["dias_acu"] = float(dias_transcurridos(st.session_state["fecha_corte"]))
+
+
+if "fecha_corte" not in st.session_state:
+    st.session_state["fecha_corte"] = hoy_ecuador()
+if "dias_acu" not in st.session_state:
+    st.session_state["dias_acu"] = float(dias_transcurridos(st.session_state["fecha_corte"]))
+
 with st.sidebar:
     st.header("Parámetros")
     dias_max = st.number_input("Días máximos de inventario en el local", min_value=1.0, max_value=180.0, value=15.0,
                                step=1.0, help="Ningún local queda con más de estos días de inventario después del traspaso.")
-    with st.expander("Venta diaria y stock", expanded=False):
-        fuente = st.radio("Venta diaria", [F_MES, F_PRON, F_ACU], index=0,
+    with st.expander("Venta diaria y stock", expanded=True):
+        fuente = st.radio("Venta diaria", [F_MES, F_PRON, F_ACU], index=2,
                           help="Mes anterior: consumo acumulado del archivo de consumo ÷ días de ese mes (ej. octubre ÷ 31). "
                                "Pronóstico: promedio de las columnas de fecha del BI. "
                                "CONSUMOS ACU: CONSUMOS ACU ÷ los días de abajo. "
                                "Si un estadístico no tiene dato en la fuente elegida, se usa el pronóstico (y si falta, CONSUMOS ACU).")
-        dias_acu = st.number_input("CONSUMOS ACU representa (días)", min_value=1.0, value=3.0, step=1.0,
-                                   help="Venta diaria = CONSUMOS ACU ÷ este número. Con 3 coincide con DIAS STOCK SUC del BI.")
+        c_dias, c_cal = st.columns([4, 1], vertical_alignment="bottom")
+        dias_acu = c_dias.number_input("CONSUMOS ACU representa (días)", min_value=1.0, step=1.0, key="dias_acu",
+                                       help="Venta diaria = CONSUMOS ACU ÷ este número. Con el calendario 📅 se calcula solo: "
+                                            "días transcurridos del mes hasta la fecha elegida (10/11 → 9 días).")
+        with c_cal.popover("📅", help="Elegir la fecha para contar los días transcurridos del mes"):
+            st.date_input("Fecha de corte", key="fecha_corte", format="DD/MM/YYYY", on_change=_al_cambiar_fecha)
+            st.caption(f"Del 1 al {st.session_state['fecha_corte']:%d/%m/%Y}: "
+                       f"**{dias_transcurridos(st.session_state['fecha_corte'])} días** transcurridos.")
+        st.caption(f"📅 Fecha de corte {st.session_state['fecha_corte']:%d/%m/%Y}")
         st.caption("Stock del local = INV NETO + ROQ LTC + ROQ PTL (INV NETO ya incluye el tránsito).")
     with st.expander("Reglas de envío", expanded=True):
-        empaque = st.checkbox("Redondear a múltiplos de EMPAQUE", value=False,
+        empaque = st.checkbox("Redondear a múltiplos de EMPAQUE", value=True,
                               help="Usa la columna EMPAQUE de la base: cada local recibe empaques completos; puede quedar sobrante.")
         filtrar_bodega = st.checkbox("Módulo 1: solo locales de la bodega de salida", value=True,
                                      help="Usa la columna BODEGA de la base para cruzar con la bodega del inventario a mover.")
