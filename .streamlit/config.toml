@@ -1,12 +1,12 @@
-# Tema claro corporativo: gris claro + blanco, rojo solo como acento.
+# Tema claro fijo: fondo gris niebla, superficies blancas, rojo TÍA como acento.
 [theme]
 base = "light"
 primaryColor = "#E30613"
-backgroundColor = "#F4F5F7"
+backgroundColor = "#F3F4F6"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#1F2933"
+textColor = "#1C2127"
 font = "sans serif"
-borderColor = "#E6E8EC"
+borderColor = "#DEE2E7"
 
 [server]
 maxUploadSize = 300

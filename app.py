@@ -12,15 +12,15 @@ import pandas as pd
 import streamlit as st
 
 import distribucion as d
-from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, ROJO, ROJO_OSC, alto_tabla, aplicar_estilo, encabezado, grafico,
-                    kpis, n, nota, pct, seccion)
+from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, NEUTRO, ROJO, ROJO_OSC, alto_tabla, aplicar_estilo, encabezado,
+                    grafico, kpis, n, nota, nota_html, pct, seccion)
 from exportar import excel_cd, excel_locales
 from plantillas import plantilla_cd, plantilla_locales
 from portal import menu_apps
 
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
-VERSION_MOTOR = "2026-11-10.6"
+VERSION_MOTOR = "2026-11-10.7"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
 
@@ -30,8 +30,8 @@ if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import portal
     for _m in (d, estilo, exportar, plantillas, portal):
         importlib.reload(_m)
-    from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, ROJO, ROJO_OSC, alto_tabla,  # noqa: F811
-                        aplicar_estilo, encabezado, grafico, kpis, n, nota, pct, seccion)
+    from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, NEUTRO, ROJO, ROJO_OSC, alto_tabla,  # noqa: F811
+                        aplicar_estilo, encabezado, grafico, kpis, n, nota, nota_html, pct, seccion)
     from exportar import excel_cd, excel_locales  # noqa: F811
     from plantillas import plantilla_cd, plantilla_locales  # noqa: F811
     from portal import menu_apps  # noqa: F811
@@ -39,12 +39,12 @@ if getattr(d, "VERSION", None) != VERSION_MOTOR:
 F_MES = "Consumo del mes anterior (archivo)"
 F_PRON = "Pronóstico diario del BI"
 F_ACU = "CONSUMOS ACU"
-st.set_page_config(page_title="Distribución de estadísticos", page_icon="🚚", layout="wide")
+st.set_page_config(page_title="Distribución de estadísticos", page_icon=":material/local_shipping:", layout="wide")
 menu_apps("Distribución de estadísticos")
 aplicar_estilo()
 
-M1 = "📦 Distribución CD a Locales"
-M2 = "🔁 Redistribución entre locales"
+M1 = ":material/warehouse: Distribución CD a Locales"
+M2 = ":material/sync_alt: Redistribución entre locales"
 ESC_NIVEL = alt.Scale(domain=[d.NIVEL_SUP, d.NIVEL_GER, d.NIVEL_MAN], range=[C_OK, C_ALT, C_EXT])
 
 
@@ -126,20 +126,20 @@ with st.sidebar:
                                "Si un estadístico no tiene dato en la fuente elegida, se usa el pronóstico (y si falta, CONSUMOS ACU).")
         c_dias, c_cal = st.columns([4, 1], vertical_alignment="bottom")
         dias_acu = c_dias.number_input("CONSUMOS ACU representa (días)", min_value=1.0, step=1.0, key="dias_acu",
-                                       help="Venta diaria = CONSUMOS ACU ÷ este número. Con el calendario 📅 se calcula solo: "
+                                       help="Venta diaria = CONSUMOS ACU ÷ este número. Con el botón del calendario se calcula solo: "
                                             "días transcurridos del mes hasta la fecha elegida (10/11 → 9 días).")
-        with c_cal.popover("📅", help="Elegir la fecha para contar los días transcurridos del mes"):
+        with c_cal.popover("", icon=":material/calendar_month:", help="Elegir la fecha para contar los días transcurridos del mes"):
             st.date_input("Fecha de corte", key="fecha_corte", format="DD/MM/YYYY", on_change=_al_cambiar_fecha)
             st.caption(f"Del 1 al {st.session_state['fecha_corte']:%d/%m/%Y}: "
                        f"**{dias_transcurridos(st.session_state['fecha_corte'])} días** transcurridos.")
-        st.caption(f"📅 Fecha de corte {st.session_state['fecha_corte']:%d/%m/%Y}")
+        st.caption(f"Fecha de corte: {st.session_state['fecha_corte']:%d/%m/%Y}")
         st.caption("Stock del local = INV NETO + ROQ LTC + ROQ PTL (INV NETO ya incluye el tránsito).")
     with st.expander("Reglas de envío", expanded=True):
         empaque = st.checkbox("Redondear a múltiplos de EMPAQUE", value=True,
                               help="Usa la columna EMPAQUE de la base: cada local recibe empaques completos; puede quedar sobrante.")
         filtrar_bodega = st.checkbox("Solo locales de la bodega de salida", value=True,
                                      help="Usa la columna BODEGA de la base para cruzar con la bodega del inventario a mover.")
-    with st.expander("📘 Cómo decide el programa"):
+    with st.expander("Cómo decide el programa", icon=":material/help:"):
         st.markdown(
             "- **Venta diaria** del local según el parámetro elegido (mes anterior: consumo del mes ÷ días del mes).\n"
             "- **Stock actual** = INV NETO + ROQ LTC + ROQ PTL (INV NETO ya incluye el tránsito).\n"
@@ -168,8 +168,7 @@ SUB_M2 = {"ambos": "Mueve inventario entre locales: primero mismo supervisor, lu
 sub = ("Reparte el inventario de una bodega entre los locales habilitados según los días máximos de inventario."
        if modulo == M1 else SUB_M2[modo_m2])
 encabezado("Distribución de Estadísticos", sub,
-           [("Base de locales", hay_base), ("Inventario a mover", hay_mov), ("Revisar y descargar", hay_base and hay_mov)],
-           eyebrow="Abastecimiento · " + ("Distribución CD a Locales" if modulo == M1 else "Redistribución entre locales"))
+           [("Base de locales", hay_base), ("Inventario a mover", hay_mov), ("Revisar y descargar", hay_base and hay_mov)])
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 modulo = st.segmented_control("Módulo", [M1, M2], default=M1, key="modulo", label_visibility="collapsed") or M1
 es_m1 = modulo == M1
@@ -193,8 +192,8 @@ with c1:
                  "Una fila por local + estadístico: '# Local', 'ESTADISTICO', 'SUPERV.', 'GERENTE', 'INV NETO', "
                  "'ROQ_LTC', 'ROQ_PTL', 'CONSUMOS ACU' y las columnas de pronóstico por fecha.", ["BASE", "INVENTARIO"])
     if base is not None:
-        st.caption(f"✅ {n(len(base))} registros · {base['local'].nunique()} locales · "
-                   f"{base['estadistico'].nunique()} estadísticos · {base['gerente'].replace('', pd.NA).nunique()} gerentes")
+        st.caption(f":green[:material/check_circle:] {n(len(base))} registros, {base['local'].nunique()} locales, "
+                   f"{base['estadistico'].nunique()} estadísticos y {base['gerente'].replace('', pd.NA).nunique()} gerentes")
 with c2:
     clave_mod = "1" if es_m1 else "2"
     if es_m1:
@@ -206,12 +205,8 @@ with c2:
                     "Usa la plantilla (Estadístico, Local de salida, Cantidad, Supervisor, Gerente) o un archivo del BI "
                     "con '# Local', 'ESTADISTICO' e 'INV NETO'.", ["PLANTILLA", "MOVER", "INV"])
     estado = st.empty()
-    st.markdown("""<style>.st-key-plantilla button { background:#FFFFFF !important; color:#1F2933 !important;
-        border:1px solid #D3D8DF !important; box-shadow:none !important; font-weight:600 !important; }
-        .st-key-plantilla button:hover { border-color:#E30613 !important; color:#E30613 !important; }
-        .st-key-plantilla button p { color:inherit !important; }</style>""", unsafe_allow_html=True)
     st.container(key="plantilla").download_button(
-        "📄 Descargar plantilla para llenar",
+        "Descargar plantilla para llenar", icon=":material/description:",
         data=plantilla_cd() if es_m1 else plantilla_locales(),
         file_name="PLANTILLA_DISTRIBUCION_CD.xlsx" if es_m1 else "PLANTILLA_REDISTRIBUCION_LOCALES.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch",
@@ -222,7 +217,7 @@ with c2:
     # ---- ingreso manual
     clave = "1" if es_m1 else "2"
     maestro = None
-    with st.expander("✏️ ¿Sin archivo? Digita o pega el inventario a mover",
+    with st.expander("¿Sin archivo? Digita o pega el inventario a mover", icon=":material/edit_note:",
                      expanded=bool(st.session_state.get(f"_manual_{clave}"))):
         if es_m1:
             st.caption("Copia desde Excel y pega en la primera celda (Ctrl+V). Si también subes un archivo, se usa el archivo.")
@@ -245,7 +240,7 @@ with c2:
             if maestro_f:
                 try:
                     maestro = leer("leer_maestro", maestro_f.getvalue(), maestro_f.name, None)
-                    st.caption(f"✅ Maestro: {len(maestro)} locales")
+                    st.caption(f":green[:material/check_circle:] Maestro: {len(maestro)} locales")
                 except Exception as e:
                     st.error(str(e))
             if maestro is None and base is not None:
@@ -278,7 +273,7 @@ with c2:
                     sg = ["Supervisor", "Gerente"]
                     cambia = (completos[sg].fillna("").astype(str).values != ed[sg].fillna("").astype(str).values).any()
                     if cambia:
-                        if st.button("↻ Completar supervisor y gerente en la tabla", width="stretch"):
+                        if st.button("Completar supervisor y gerente en la tabla", icon=":material/autorenew:", width="stretch"):
                             st.session_state["m2_df"] = completos
                             st.session_state["m2_v"] += 1
                             st.rerun()
@@ -291,8 +286,8 @@ with c2:
     if not es_m1 and mov is not None and maestro is not None and len(maestro):
         mov = d.completar_responsables(mov, maestro)
     if mov is not None and len(mov):
-        estado.caption(f"✅ {len(mov)} registros · {n(mov['cantidad'].sum())} unidades a mover · "
-                       f"{mov['estadistico'].nunique()} estadísticos")
+        estado.caption(f":green[:material/check_circle:] {len(mov)} registros, {n(mov['cantidad'].sum())} unidades a mover "
+                       f"y {mov['estadistico'].nunique()} estadísticos")
 
 # ---- consumo del mes anterior (export del BI, uno o varios archivos)
 consumo = None
@@ -313,8 +308,8 @@ if params.fuente_venta == "mensual":
         mensual = pd.concat(partes).drop_duplicates(["local", "estadistico", "mes"], keep="last")
         consumo = d.consumo_diario(mensual)
         per = consumo.drop_duplicates("estadistico")[["estadistico", "periodo"]]
-        st.caption("✅ " + " · ".join(f"{r.estadistico}: {r.periodo}" for r in per.itertuples()) +
-                   f" · {consumo['local'].nunique()} locales")
+        st.caption(":green[:material/check_circle:] " + "; ".join(f"{r.estadistico}: {r.periodo}" for r in per.itertuples()) +
+                   f"; {consumo['local'].nunique()} locales")
     else:
         nota("Sube el export de consumo del mes anterior. Mientras no lo subas, se usa el <b>pronóstico diario del BI</b>.", "warn")
 
@@ -354,16 +349,18 @@ a1, a2 = st.columns([3, 1.3])
 falta = r["und_sobrante"] if es_m1 else r["pendiente"]
 GRUPO_M2 = {"ambos": "del mismo supervisor y gerente", "supervisor": "del mismo supervisor", "gerente": "del mismo gerente"}
 if falta > 0:
-    a1.markdown(f'<div class="nota warn">Se asignan <b>{n(r["und_mover"] - falta)}</b> de <b>{n(r["und_mover"])}</b> unidades. '
-                f'Quedan <b>{n(falta)}</b> {"en el CD (sobrante)" if es_m1 else "para asignación manual"}: '
-                f'los locales {"habilitados" if es_m1 else GRUPO_M2[modo_m2]} no pueden recibir más sin pasar '
-                f'<b>{dias_max:g} días</b>.</div>', unsafe_allow_html=True)
+    a1.markdown(nota_html(f'Se asignan <b>{n(r["und_mover"] - falta)}</b> de <b>{n(r["und_mover"])}</b> unidades. '
+                          f'Quedan <b>{n(falta)}</b> {"en el CD (sobrante)" if es_m1 else "para asignación manual"}: '
+                          f'los locales {"habilitados" if es_m1 else GRUPO_M2[modo_m2]} no pueden recibir más sin pasar '
+                          f'<b>{dias_max:g} días</b>.', "warn"), unsafe_allow_html=True)
 else:
-    a1.markdown(f'<div class="nota ok">✅ Se asigna todo el inventario sin que ningún local pase de {dias_max:g} días.</div>',
+    a1.markdown(nota_html(f"Se asigna todo el inventario sin que ningún local pase de <b>{dias_max:g} días</b>.", "ok"),
                 unsafe_allow_html=True)
 nombre = "DISTRIBUCION_CD_LOCALES" if es_m1 else "REDISTRIBUCION_LOCALES"
-a2.download_button("⬇️ Descargar Excel de resultados", data=excel, file_name=f"{nombre}_{datetime.now():%Y%m%d_%H%M}.xlsx",
+a2.download_button("Descargar Excel de resultados", icon=":material/download:", data=excel, file_name=f"{nombre}_{datetime.now():%Y%m%d_%H%M}.xlsx",
                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
 
 def filtrar(df, filtros):
     """filtros: lista de (columna, valores seleccionados); sin selección = todos."""
@@ -403,7 +400,7 @@ def grafico_dias(dist, sub):
           tooltip=[alt.Tooltip("loc:N", title="Local"), alt.Tooltip("despues:Q", title="Días después", format=".1f"),
                    alt.Tooltip("cant:Q", title="Unidades recibidas")])
     lim = alt.Chart(pd.DataFrame({"x": [dias_max]})).mark_rule(color=ROJO, strokeDash=[6, 4], strokeWidth=2).encode(x="x:Q")
-    grafico("Días de inventario: antes → después (local · estadístico)", sub, (regla + p1 + p2 + lim).properties(height=26 * len(dd) + 60))
+    grafico("Días de inventario antes y después del traspaso", sub, (regla + p1 + p2 + lim).properties(height=26 * len(dd) + 60))
 
 
 def barras_apiladas(df, cat, cols, colores, titulo, sub, orden=None, alto_fila=30, leyenda=True):
@@ -455,14 +452,14 @@ if es_m1:
             h1, h2 = st.columns(2)
             with h1:
                 gg = dist.groupby("Gerente Destino", as_index=False)["Cantidad"].sum().rename(columns={"Cantidad": "Unidades"})
-                barras_apiladas(gg, "Gerente Destino", ["Unidades"], ["#52606D"], "Unidades por gerente",
+                barras_apiladas(gg, "Gerente Destino", ["Unidades"], [NEUTRO], "Unidades por gerente",
                                 "Cómo se reparte el inventario entre las gerencias.")
             with h2:
                 ss = dist.groupby("Supervisor Destino", as_index=False)["Cantidad"].sum().rename(columns={"Cantidad": "Unidades"})
                 ss = ss.sort_values("Unidades", ascending=False).head(15)
                 barras_apiladas(ss, "Supervisor Destino", ["Unidades"], [C_ALT], "Top 15 supervisores que reciben", "")
-            grafico_dias(dist, f"Top 25 locales por unidades recibidas. La línea roja es el tope de {dias_max:g} días.")
-        st.markdown("##### Detalle por estadístico")
+            grafico_dias(dist, f"Los 25 locales que más reciben. Punto gris: días antes; punto verde: días después; línea roja: tope de {dias_max:g} días.")
+        seccion("Detalle por estadístico")
         tabla(res.por_item)
     with t_dist:
         nota("Lista para grabar: <b>origen (CD) → local destino · estadístico · cantidad</b>. Incluye días antes y después.")
@@ -472,7 +469,7 @@ if es_m1:
             s_ge = f2.multiselect("Gerente", sorted(dist["Gerente Destino"].unique()), placeholder="Todos")
             vista = filtrar(dist, [("Estadístico", s_it), ("Gerente Destino", s_ge)])
             tabla(vista)
-            st.caption(f"{len(vista)} traspasos · {n(vista['Cantidad'].sum())} unidades")
+            st.caption(f"{len(vista)} traspasos, {n(vista['Cantidad'].sum())} unidades")
         else:
             tabla(dist)
     with t_sob:
@@ -502,7 +499,7 @@ else:
         partes = [(d.NIVEL_SUP, r["nivel_sup"], C_OK), (d.NIVEL_GER, r["nivel_ger"], C_ALT), (d.NIVEL_MAN, r["pendiente"], C_EXT)]
         barras = "".join(f'<div style="flex:{v};background:{c}" title="{p}: {n(v)}">{pct(v, tot)}</div>' for p, v, c in partes if v > 0)
         ley = "".join(f'<span style="--c:{c}">{p}: <b>{n(v)}</b></span>' for p, v, c in partes)
-        seccion("¿Dónde se ubica el inventario?", f"Reparto de las unidades · filtro: {d.MODOS_M2[modo_m2].lower()}")
+        seccion("¿Dónde se ubica el inventario?", f"Reparto de las unidades con el filtro: {d.MODOS_M2[modo_m2].lower()}.")
         st.markdown(f'<div class="flujo">{barras}</div><div class="leyenda">{ley}</div>', unsafe_allow_html=True)
 
         pi = res.por_item.copy()
@@ -511,7 +508,7 @@ else:
         g1, g2 = st.columns([1.5, 1])
         with g1:
             barras_apiladas(pi, "origen", [d.NIVEL_SUP, d.NIVEL_GER, d.NIVEL_MAN], [C_OK, C_ALT, C_EXT],
-                            "Cómo se ubicó cada local de salida", "Local de salida · estadístico. Colores como en la barra de arriba.",
+                            "Cómo se ubicó cada local de salida", "Cada fila es un local de salida con su estadístico. Colores como en la barra de arriba.",
                             orden=pi.sort_values(d.NIVEL_MAN, ascending=False)["origen"].tolist(), alto_fila=26, leyenda=False)
         with g2:
             gg = pi.groupby("Gerente Origen", as_index=False)[[d.NIVEL_SUP, d.NIVEL_GER, d.NIVEL_MAN]].sum()
@@ -524,14 +521,14 @@ else:
             bm = alt.Chart(mx).encode(x=alt.X("Destino:N", title="Local destino", axis=alt.Axis(labelAngle=-45)),
                                       y=alt.Y("Origen:N", title="Local de salida"))
             heat = bm.mark_rect(cornerRadius=4).encode(
-                color=alt.Color("Cantidad:Q", scale=alt.Scale(scheme="reds"), legend=alt.Legend(title="Unidades")),
+                color=alt.Color("Cantidad:Q", scale=alt.Scale(scheme="reds"), legend=alt.Legend(title="Unidades", format=",.0f")),
                 tooltip=["Origen:N", "Destino:N", alt.Tooltip("Cantidad:Q", title="Unidades")])
             txt = bm.mark_text(fontSize=10, fontWeight="bold").encode(
                 text="Cantidad:Q", color=alt.condition(alt.datum.Cantidad > mx["Cantidad"].max() * .5, alt.value("white"), alt.value("black")))
             grafico("Matriz de traspasos", "Unidades que envía cada local de salida (filas) a cada destino (columnas).",
                     (heat + txt).properties(height=max(160, 34 * mx["Origen"].nunique() + 70)))
-            grafico_dias(dist, f"Top 25 locales destino por unidades. La línea roja es el tope de {dias_max:g} días.")
-        st.markdown("##### Detalle por local de salida")
+            grafico_dias(dist, f"Los 25 locales destino que más reciben. Punto gris: días antes; punto verde: días después; línea roja: tope de {dias_max:g} días.")
+        seccion("Detalle por local de salida")
         tabla(res.por_item)
     with t_dist:
         nota("Lista para grabar: <b>local de salida → local destino · estadístico · cantidad</b>, con el nivel en que se asignó.")
@@ -542,7 +539,7 @@ else:
             s_it = f3.multiselect("Estadístico", sorted(dist["Estadístico"].unique()), placeholder="Todos")
             vista = filtrar(dist, [("Nivel", s_n), ("Local Origen", s_o), ("Estadístico", s_it)])
             tabla(vista)
-            st.caption(f"{len(vista)} traspasos · {n(vista['Cantidad'].sum())} unidades")
+            st.caption(f"{len(vista)} traspasos, {n(vista['Cantidad'].sum())} unidades")
         else:
             tabla(dist)
     with t_pen:
@@ -551,7 +548,7 @@ else:
             nota(f"Estas unidades no caben en locales <b>{GRUPO_M2[modo_m2]}</b>. "
                  f"Asígnalas manualmente; la última columna sugiere locales {fuera} con capacidad.", "warn")
         else:
-            nota("✅ No queda nada pendiente de asignación manual.", "ok")
+            nota("No queda nada pendiente de asignación manual.", "ok")
         tabla(res.pendientes)
     with t_no:
         tabla(res.no_considerados)

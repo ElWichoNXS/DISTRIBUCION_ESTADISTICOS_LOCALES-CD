@@ -6,10 +6,10 @@ Para agregar una app nueva o cambiar una dirección, edita APPS en este archivo
 import streamlit as st
 
 APPS = [
-    # (nombre, ícono, dirección en Streamlit Cloud)
-    ("Verificación de traspasos", "📦", "https://verificaciondesolicitudesagotados-kkf5f8ke8v4c9ovjzrv6nk.streamlit.app/"),
-    ("Min / Max por local", "📊", "https://elwichonxs-abasto-kbt59qziqyexuqjhmhyan6.streamlit.app/"),
-    ("Distribución de estadísticos", "🚚", ""),  # pendiente: pegar aquí la dirección cuando se publique
+    # (nombre, ícono Material de Streamlit, dirección en Streamlit Cloud)
+    ("Verificación de traspasos", ":material/fact_check:", "https://verificaciondesolicitudesagotados-kkf5f8ke8v4c9ovjzrv6nk.streamlit.app/"),
+    ("Min / Max por local", ":material/stacked_bar_chart:", "https://elwichonxs-abasto-kbt59qziqyexuqjhmhyan6.streamlit.app/"),
+    ("Distribución de estadísticos", ":material/local_shipping:", ""),  # pendiente: pegar aquí la dirección cuando se publique
 ]
 
 
