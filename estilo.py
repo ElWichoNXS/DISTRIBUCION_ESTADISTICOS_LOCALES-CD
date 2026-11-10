@@ -5,33 +5,17 @@ import streamlit as st
 ROJO, ROJO_OSC = "#E30613", "#B8050F"
 C_OK, C_ALT, C_BAJO, C_EXT, C_PEND = "#1FA391", "#4B86E6", "#D39A2E", "#E5414B", "#8C8C8C"
 
-# Paletas: el rojo es solo acento. "light" = gris claro + blanco; "dark" = negro mate + gris carbón.
-PALETAS = {
-    "light": dict(ROJO="#E30613", ROJO_OSC="#B8050F", FONDO="#F4F5F7", SUPERFICIE="#FFFFFF", SUPERFICIE_2="#F4F5F7",
-                  TEXTO="#1F2933", TEXTO_2="#52606D", TEXTO_3="#8A94A3", LINEA="#E6E8EC", LINEA_2="#D3D8DF",
-                  ROJO_SUAVE="#FDEDEE", NEUTRO="#52606D",
-                  SOMBRA="0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.06)",
-                  SOMBRA_ROJA="0 2px 8px rgba(227,6,19,.25)"),
-    "dark": dict(ROJO="#E8202B", ROJO_OSC="#FF3B45", FONDO="#0E0F12", SUPERFICIE="#17191E", SUPERFICIE_2="#1E2128",
-                 TEXTO="#F3F4F6", TEXTO_2="#C3C8D1", TEXTO_3="#8B93A1", LINEA="#262A31", LINEA_2="#4A505B",
-                 ROJO_SUAVE="rgba(232,32,43,.16)", NEUTRO="#AEB5C1",
-                 SOMBRA="0 1px 2px rgba(0,0,0,.45), 0 12px 32px rgba(0,0,0,.45)",
-                 SOMBRA_ROJA="0 4px 14px rgba(232,32,43,.35)"),
-}
-MODO = "light"
-P = PALETAS[MODO]
-# nombres usados por el resto del código (se actualizan en aplicar_estilo según el tema)
-FONDO, SUPERFICIE, TEXTO, TEXTO_2, TEXTO_3 = P["FONDO"], P["SUPERFICIE"], P["TEXTO"], P["TEXTO_2"], P["TEXTO_3"]
-LINEA, LINEA_2, ROJO_SUAVE, SOMBRA, NEUTRO = P["LINEA"], P["LINEA_2"], P["ROJO_SUAVE"], P["SOMBRA"], P["NEUTRO"]
+# Paleta neutra (gris claro + blanco); el rojo es solo acento.
+FONDO, SUPERFICIE = "#F4F5F7", "#FFFFFF"
+TEXTO, TEXTO_2, TEXTO_3 = "#1F2933", "#52606D", "#8A94A3"
+LINEA, LINEA_2 = "#E6E8EC", "#D3D8DF"
+ROJO_SUAVE = "#FDEDEE"
+SOMBRA = "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.06)"
+SOMBRA_2 = "0 2px 4px rgba(16,24,40,.05), 0 12px 28px rgba(16,24,40,.08)"
 BORDE = LINEA          # compatibilidad con el código existente
 TARJETA = SUPERFICIE
 
-
-def _css(pal: dict) -> str:
-    ROJO, ROJO_OSC, FONDO, SUPERFICIE, SUPERFICIE_2 = pal["ROJO"], pal["ROJO_OSC"], pal["FONDO"], pal["SUPERFICIE"], pal["SUPERFICIE_2"]
-    TEXTO, TEXTO_2, TEXTO_3, LINEA, LINEA_2 = pal["TEXTO"], pal["TEXTO_2"], pal["TEXTO_3"], pal["LINEA"], pal["LINEA_2"]
-    ROJO_SUAVE, SOMBRA, SOMBRA_ROJA = pal["ROJO_SUAVE"], pal["SOMBRA"], pal["SOMBRA_ROJA"]
-    return f"""
+CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 html, body, .stApp, h1, h2, h3, h4, p, label, li, button, input, textarea {{ font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }}
@@ -102,7 +86,7 @@ section[data-testid="stSidebar"] h4 {{ color:{TEXTO_3} !important; font-size:.72
 .st-key-menu_apps [data-testid="stMarkdownContainer"], .st-key-menu_apps [data-testid="stTooltipHoverTarget"] {{
     justify-content:flex-start !important; width:100% !important; text-align:left !important; }}
 .st-key-menu_apps p {{ text-align:left !important; }}
-.st-key-menu_apps a:hover {{ background:{SUPERFICIE_2} !important; color:{TEXTO} !important; }}
+.st-key-menu_apps a:hover {{ background:{FONDO} !important; color:{TEXTO} !important; }}
 .st-key-menu_apps a p, .st-key-menu_apps button p {{ color:inherit !important; }}
 .st-key-menu_apps button:disabled {{ background:{ROJO_SUAVE} !important; color:{ROJO} !important; opacity:1 !important;
     box-shadow:inset 3px 0 0 {ROJO} !important; }}
@@ -112,14 +96,14 @@ div[data-testid="stFileUploader"] section {{ background:{SUPERFICIE}; border:1.5
     min-height:96px; align-items:center; box-shadow:{SOMBRA}; transition:border-color .15s; }}
 div[data-testid="stFileUploader"] section:hover {{ border-color:{ROJO}; }}
 div[data-testid="stFileUploader"] section button {{ background:{ROJO}; color:#fff; border:none; border-radius:8px;
-    font-weight:600; box-shadow:{SOMBRA_ROJA}; }}
+    font-weight:600; box-shadow:0 2px 6px rgba(227,6,19,.25); }}
 div[data-testid="stFileUploader"] section button:hover {{ background:{ROJO_OSC}; color:#fff; }}
 div[data-testid="stFileUploader"] label p {{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:{TEXTO}; font-weight:600; }}
-div[data-testid="stFileUploaderFile"] {{ background:{SUPERFICIE_2}; border-radius:8px; padding:4px 8px; }}
+div[data-testid="stFileUploaderFile"] {{ background:{FONDO}; border-radius:8px; padding:4px 8px; }}
 
 /* ---------- Botones ---------- */
 button[data-testid="stBaseButton-primary"], div[data-testid="stDownloadButton"] button {{
-    background:{ROJO}; color:#fff; border:none; border-radius:10px; font-weight:600; box-shadow:{SOMBRA_ROJA}; }}
+    background:{ROJO}; color:#fff; border:none; border-radius:10px; font-weight:600; box-shadow:0 2px 8px rgba(227,6,19,.25); }}
 button[data-testid="stBaseButton-primary"]:hover, div[data-testid="stDownloadButton"] button:hover {{ background:{ROJO_OSC}; color:#fff; border:none; }}
 button[data-testid="stBaseButton-primary"] p, div[data-testid="stDownloadButton"] button p {{ color:#fff; }}
 button[data-testid="stBaseButton-secondary"] {{ background:{SUPERFICIE}; border:1px solid {LINEA_2}; border-radius:10px;
@@ -156,13 +140,6 @@ div[data-testid="stButtonGroup"] button[kind="segmented_controlActive"] p {{ col
 
 /* ---------- Campos ---------- */
 div[data-baseweb="input"], div[data-baseweb="select"] > div {{ border-radius:8px !important; }}
-/* ---------- Botón de plantilla (secundario) ---------- */
-.st-key-plantilla button {{ background:{SUPERFICIE} !important; color:{TEXTO} !important; border:1px solid {LINEA_2} !important;
-    box-shadow:none !important; font-weight:600 !important; }}
-.st-key-plantilla button:hover {{ border-color:{ROJO} !important; color:{ROJO} !important; }}
-.st-key-plantilla button p {{ color:inherit !important; }}
-/* ---------- Campos (fondo de inputs en modo oscuro) ---------- */
-div[data-baseweb="input"] > div, div[data-baseweb="select"] > div, div[data-testid="stNumberInputContainer"] {{ background:{SUPERFICIE_2}; }}
 </style>
 """
 
@@ -184,23 +161,9 @@ def encabezado(titulo: str, subtitulo: str, pasos: list[tuple[str, bool]], eyebr
 <div class="stepper">{nodos}</div></div>''', unsafe_allow_html=True)
 
 
-def tema_actual() -> str:
-    """'dark' o 'light' según el tema elegido en Streamlit (⋮ → Settings → Theme)."""
-    try:
-        return "dark" if (st.context.theme.type or "light") == "dark" else "light"
-    except Exception:
-        return "light"
-
-
 def aplicar_estilo():
-    global MODO, P, FONDO, SUPERFICIE, TEXTO, TEXTO_2, TEXTO_3, LINEA, LINEA_2, ROJO_SUAVE, SOMBRA, NEUTRO, BORDE, TARJETA
     _n_graf[0] = 0
-    MODO = tema_actual()
-    P = PALETAS[MODO]
-    FONDO, SUPERFICIE, TEXTO, TEXTO_2, TEXTO_3 = P["FONDO"], P["SUPERFICIE"], P["TEXTO"], P["TEXTO_2"], P["TEXTO_3"]
-    LINEA, LINEA_2, ROJO_SUAVE, SOMBRA, NEUTRO = P["LINEA"], P["LINEA_2"], P["ROJO_SUAVE"], P["SOMBRA"], P["NEUTRO"]
-    BORDE, TARJETA = LINEA, SUPERFICIE
-    st.markdown(_css(P), unsafe_allow_html=True)
+    st.markdown(CSS, unsafe_allow_html=True)
 
 
 

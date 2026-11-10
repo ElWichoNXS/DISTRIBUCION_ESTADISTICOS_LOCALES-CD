@@ -1,21 +1,12 @@
-# Tema corporativo con modo claro y oscuro (⋮ → Settings → Theme). El rojo es solo acento.
+# Tema claro corporativo: gris claro + blanco, rojo solo como acento.
 [theme]
-primaryColor = "#E30613"
-font = "sans serif"
-
-[theme.light]
+base = "light"
 primaryColor = "#E30613"
 backgroundColor = "#F4F5F7"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#1F2933"
+font = "sans serif"
 borderColor = "#E6E8EC"
-
-[theme.dark]
-primaryColor = "#E8202B"
-backgroundColor = "#0E0F12"
-secondaryBackgroundColor = "#17191E"
-textColor = "#F3F4F6"
-borderColor = "#262A31"
 
 [server]
 maxUploadSize = 300
