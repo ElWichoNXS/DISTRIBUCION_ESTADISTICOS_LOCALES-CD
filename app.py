@@ -20,7 +20,7 @@ from portal import menu_apps
 
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
-VERSION_MOTOR = "2026-11-10.1"
+VERSION_MOTOR = "2026-11-10.2"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
 
@@ -112,8 +112,8 @@ with st.sidebar:
             "- **Nivelación:** se entrega de a una unidad (o empaque) al local con **menos días de inventario**, "
             "hasta repartir todo o hasta que todos lleguen a los días máximos.\n"
             "- Un local **sin venta** no recibe.\n"
-            "- **Módulo 2:** primero locales del **mismo supervisor**, luego del **mismo gerente**; lo que no cabe queda "
-            "**pendiente manual** con sugerencias de otros gerentes.")
+            "- **Módulo 2:** según el filtro elegido: mismo supervisor y luego mismo gerente, solo mismo supervisor o "
+            "solo mismo gerente; lo que no cabe queda **pendiente manual** con sugerencias de locales fuera del filtro.")
 params = d.Parametros(dias_max=dias_max, fuente_venta={F_MES: "mensual", F_PRON: "pronostico", F_ACU: "consumo"}[fuente],
                       dias_consumo_acu=dias_acu,
                       redondear_empaque=empaque, filtrar_bodega=filtrar_bodega)
@@ -126,9 +126,13 @@ hay_base = st.session_state.get("base") is not None
 hay_mov = (st.session_state.get(f"mov_{modulo == M1 and 1 or 2}") is not None
            or bool(st.session_state.get(f"_manual_{modulo == M1 and 1 or 2}")))
 paso = lambda ok: "paso ok" if ok else "paso"
+MODO_LBL = {v: k for k, v in d.MODOS_M2.items()}          # etiqueta → clave ("ambos", "supervisor", "gerente")
+modo_m2 = MODO_LBL.get(st.session_state.get("nivel_m2"), "ambos")
+SUB_M2 = {"ambos": "Mueve inventario entre locales: primero mismo supervisor, luego mismo gerente; lo demás queda para asignación manual.",
+          "supervisor": "Mueve inventario solo entre locales del mismo supervisor; lo demás queda para asignación manual.",
+          "gerente": "Mueve inventario solo entre locales del mismo gerente; lo demás queda para asignación manual."}
 sub = ("Reparte el inventario de una bodega entre los locales habilitados según los días máximos de inventario."
-       if modulo == M1 else
-       "Mueve inventario entre locales: primero mismo supervisor, luego mismo gerente; lo demás queda para asignación manual.")
+       if modulo == M1 else SUB_M2[modo_m2])
 st.markdown(f"""
 <div class="hero">
   <div>
@@ -145,6 +149,15 @@ st.markdown(f"""
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 modulo = st.segmented_control("Módulo", [M1, M2], default=M1, key="modulo", label_visibility="collapsed") or M1
 es_m1 = modulo == M1
+if not es_m1:
+    eleccion = st.radio("Redistribuir entre locales del:", list(d.MODOS_M2.values()), horizontal=True, key="nivel_m2",
+                        help="Mismo supervisor y luego mismo gerente: primero llena los locales del supervisor del local de salida "
+                             "y lo que sobra va a los demás locales de su gerente. "
+                             "Solo mismo supervisor: no pasa a otros supervisores. "
+                             "Solo mismo gerente: reparte entre todos los locales del gerente (incluye los del mismo supervisor) "
+                             "sin dar prioridad al supervisor.")
+    modo_m2 = MODO_LBL[eleccion]
+params.nivel_m2 = modo_m2
 
 # ----------------------------------------------------------------------
 # Carga
@@ -299,7 +312,7 @@ def calcular(es_m1, base, mov, p_tuple, consumo, version):
 
 
 p_tuple = (params.dias_max, params.fuente_venta, params.dias_consumo_acu,
-           params.redondear_empaque, params.filtrar_bodega)
+           params.redondear_empaque, params.filtrar_bodega, params.nivel_m2)
 if consumo is not None:
     sin_consumo = sorted(set(mov["estadistico"]) - set(consumo["estadistico"]))
     if sin_consumo:
@@ -314,10 +327,11 @@ dist = res.distribucion
 st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 a1, a2 = st.columns([3, 1.3])
 falta = r["und_sobrante"] if es_m1 else r["pendiente"]
+GRUPO_M2 = {"ambos": "del mismo supervisor y gerente", "supervisor": "del mismo supervisor", "gerente": "del mismo gerente"}
 if falta > 0:
     a1.markdown(f'<div class="nota warn">Se asignan <b>{n(r["und_mover"] - falta)}</b> de <b>{n(r["und_mover"])}</b> unidades. '
                 f'Quedan <b>{n(falta)}</b> {"en el CD (sobrante)" if es_m1 else "para asignación manual"}: '
-                f'los locales {"habilitados" if es_m1 else "del mismo supervisor y gerente"} no pueden recibir más sin pasar '
+                f'los locales {"habilitados" if es_m1 else GRUPO_M2[modo_m2]} no pueden recibir más sin pasar '
                 f'<b>{dias_max:g} días</b>.</div>', unsafe_allow_html=True)
 else:
     a1.markdown(f'<div class="nota ok">✅ Se asigna todo el inventario sin que ningún local pase de {dias_max:g} días.</div>',
@@ -451,8 +465,10 @@ else:
     with t_res:
         kpis([
             ("Unidades a mover", n(r["und_mover"]), f"{r['origenes']} registros origen", ROJO),
-            ("Mismo supervisor", n(r["nivel_sup"]), f"{pct(r['nivel_sup'], r['und_mover'])} del total", C_OK),
-            ("Mismo gerente", n(r["nivel_ger"]), f"{pct(r['nivel_ger'], r['und_mover'])} del total", C_ALT),
+            *([("Mismo supervisor", n(r["nivel_sup"]), f"{pct(r['nivel_sup'], r['und_mover'])} del total", C_OK)]
+              if modo_m2 != "gerente" else []),
+            *([("Mismo gerente", n(r["nivel_ger"]), f"{pct(r['nivel_ger'], r['und_mover'])} del total", C_ALT)]
+              if modo_m2 != "supervisor" else []),
             ("Pendiente manual", n(r["pendiente"]), f"{pct(r['pendiente'], r['und_mover'])} del total", C_EXT),
             ("Traspasos", n(r["traspasos"]), "líneas a grabar", C_BAJO),
             ("Locales que reciben", n(r["locales"]), f"tope {dias_max:g} días", ROJO_OSC),
@@ -461,7 +477,7 @@ else:
         partes = [(d.NIVEL_SUP, r["nivel_sup"], C_OK), (d.NIVEL_GER, r["nivel_ger"], C_ALT), (d.NIVEL_MAN, r["pendiente"], C_EXT)]
         barras = "".join(f'<div style="flex:{v};background:{c}" title="{p}: {n(v)}">{pct(v, tot)}</div>' for p, v, c in partes if v > 0)
         ley = "".join(f'<span style="--c:{c}">{p}: <b>{n(v)}</b></span>' for p, v, c in partes)
-        seccion("¿Dónde se ubica el inventario?", "Reparto de las unidades según el nivel de prioridad")
+        seccion("¿Dónde se ubica el inventario?", f"Reparto de las unidades · filtro: {d.MODOS_M2[modo_m2].lower()}")
         st.markdown(f'<div class="flujo">{barras}</div><div class="leyenda">{ley}</div>', unsafe_allow_html=True)
 
         pi = res.por_item.copy()
@@ -506,8 +522,9 @@ else:
             tabla(dist)
     with t_pen:
         if len(res.pendientes):
-            nota("Estas unidades no caben en locales del <b>mismo supervisor</b> ni del <b>mismo gerente</b>. "
-                 "Asígnalas manualmente; la última columna sugiere locales de otros gerentes con capacidad.", "warn")
+            fuera = "de otros supervisores (primero del mismo gerente)" if modo_m2 == "supervisor" else "de otros gerentes"
+            nota(f"Estas unidades no caben en locales <b>{GRUPO_M2[modo_m2]}</b>. "
+                 f"Asígnalas manualmente; la última columna sugiere locales {fuera} con capacidad.", "warn")
         else:
             nota("✅ No queda nada pendiente de asignación manual.", "ok")
         tabla(res.pendientes)

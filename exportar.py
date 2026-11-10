@@ -12,18 +12,18 @@ from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from distribucion import NIVEL_GER, NIVEL_MAN, NIVEL_SUP, Parametros, Resultado
+from distribucion import MODOS_M2, NIVEL_GER, NIVEL_MAN, NIVEL_SUP, Parametros, Resultado
 
 ROJO, ROJO_OSC = "E30613", "A30410"
 C_OK, C_ALT, C_BAJO, C_PEND = "1FA391", "4B86E6", "D39A2E", "8C8C8C"
 thin = Side(style="thin", color="BFBFBF")
 BORDE = Border(left=thin, right=thin, top=thin, bottom=thin)
 F_ROJO = PatternFill("solid", fgColor="F8CBAD")
-ANCHOS = {"Descripción": 40, "Observación": 52, "Motivo": 52, "Sugerencia (otros gerentes · capacidad)": 60,
+ANCHOS = {"Descripción": 40, "Observación": 52, "Motivo": 52, "Sugerencia (fuera del filtro · capacidad)": 60,
           "Nombre Destino": 20, "Nombre Origen": 20, "Nombre": 20, "Supervisor Destino": 18, "Gerente Destino": 18,
           "Supervisor Origen": 18, "Gerente Origen": 18, "Supervisor": 18, "Gerente": 18, "Nivel": 20, "Fuente Venta": 22}
 PCT = {"% Asignado"}
-TEXTO_IZQ = {"Descripción", "Observación", "Motivo", "Sugerencia (otros gerentes · capacidad)", "Nombre Destino",
+TEXTO_IZQ = {"Descripción", "Observación", "Motivo", "Sugerencia (fuera del filtro · capacidad)", "Nombre Destino",
              "Nombre Origen", "Nombre"}
 
 
@@ -81,7 +81,8 @@ def _encabezado_resumen(ws, titulo, p: Parametros, kpis: list[tuple]):
     ws["A2"] = (f"Generado {datetime.now():%d/%m/%Y %H:%M} · Días máx {p.dias_max:g} · "
                 f"Venta diaria: {_fuente(p)}"
                 f" · Stock = INV NETO + ROQ LTC + ROQ PTL"
-                f" · {'Redondeo a múltiplos de EMPAQUE' if p.redondear_empaque else 'Unidades sueltas'}")
+                f" · {'Redondeo a múltiplos de EMPAQUE' if p.redondear_empaque else 'Unidades sueltas'}"
+                + (f" · Redistribución: {MODOS_M2.get(p.nivel_m2, '').lower()}" if titulo.startswith("REDISTRIB") else ""))
     ws["A2"].font = Font(italic=True, size=9, color="595959")
     for k, (lbl, val) in enumerate(kpis):
         c = 1 + k * 2
@@ -248,10 +249,11 @@ def excel_locales(res: Resultado, p: Parametros) -> bytes:
             ws.column_dimensions[get_column_letter(c)].hidden = True
     ws.freeze_panes = "A8"
     _hoja_forzados(wb, res.distribucion, con_origen=True)
+    filtro = MODOS_M2.get(r.get("modo", "ambos"), MODOS_M2["ambos"])
     _hoja(wb, "DISTRIBUCIÓN", res.distribucion, "TRASPASOS ENTRE LOCALES A GRABAR",
-          f"Local origen → local destino. Prioridad: mismo supervisor, luego mismo gerente. Ningún destino supera {p.dias_max:g} días.")
+          f"Local origen → local destino. Redistribución: {filtro.lower()}. Ningún destino supera {p.dias_max:g} días.")
     _hoja(wb, "PENDIENTE MANUAL", res.pendientes, "PENDIENTE DE ASIGNACIÓN MANUAL",
-          "No hay capacidad en locales del mismo supervisor ni del mismo gerente. Se sugieren locales de otros gerentes con capacidad.", ROJO)
+          f"No hay capacidad dentro del filtro ({filtro.lower()}). Se sugieren locales fuera del filtro con capacidad.", ROJO)
     _hoja(wb, "LOCALES NO CONSIDERADOS", res.no_considerados, "LOCALES DE LA BASE QUE NO RECIBEN",
           "Motivo: sin venta o ya con los días máximos cubiertos.", "595959")
     buf = io.BytesIO()

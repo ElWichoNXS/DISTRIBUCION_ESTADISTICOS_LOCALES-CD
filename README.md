@@ -7,10 +7,16 @@ inventario** que definas.
 Reparte las unidades que salen de una bodega entre los locales donde el producto está habilitado.
 
 ## Módulo 2 · Redistribución entre locales
-Mueve el inventario de un local de salida a otros locales con esta prioridad:
-1. Locales del **mismo supervisor**.
-2. Locales del **mismo gerente**.
-3. Lo que no cabe queda **pendiente de asignación manual**, con sugerencias de locales de otros gerentes con capacidad.
+Mueve el inventario de un local de salida a otros locales. Un filtro permite elegir entre qué locales se redistribuye:
+
+| Filtro | Locales que pueden recibir |
+|---|---|
+| **Mismo supervisor y luego mismo gerente** (por defecto) | 1) los del mismo supervisor; 2) lo que sobra, a los demás locales del mismo gerente |
+| **Solo mismo supervisor** | solo los del mismo supervisor |
+| **Solo mismo gerente** | todos los del mismo gerente (incluye los del mismo supervisor), sin prioridad por supervisor |
+
+Lo que no cabe queda **pendiente de asignación manual**, con sugerencias de locales fuera del filtro con capacidad
+(con "solo mismo supervisor", primero otros supervisores del mismo gerente; en los demás casos, otros gerentes).
 
 ## Cómo decide
 | Concepto | Cálculo |

@@ -58,7 +58,7 @@ def test_locales_pendiente_con_sugerencia_de_otro_gerente():
     res = d.redistribuir_locales(BASE, mov, d.Parametros(dias_max=10))
     # capacidad sup.a1 = 10, ger.a = 40 → 10 pendientes; L5 (ger.b) se sugiere
     assert res.resumen["pendiente"] == 10
-    assert "5 (" in res.pendientes["Sugerencia (otros gerentes · capacidad)"].iloc[0]
+    assert "5 (" in res.pendientes["Sugerencia (fuera del filtro · capacidad)"].iloc[0]
 
 
 def _llenar(bytes_xlsx, filas):
@@ -102,7 +102,7 @@ def test_pendiente_sin_locales_de_otros_gerentes():
                         "gerente": ["ger.a"], "descripcion_mov": [""]})
     res = d.redistribuir_locales(base, mov, d.Parametros(dias_max=10))
     assert res.resumen["pendiente"] == 10
-    assert res.pendientes["Sugerencia (otros gerentes · capacidad)"].iloc[0] == "Sin locales con capacidad"
+    assert res.pendientes["Sugerencia (fuera del filtro · capacidad)"].iloc[0] == "Sin locales con capacidad"
 
 
 def test_stock_es_inv_neto_mas_roq_ltc_y_ptl_sin_transito():
@@ -192,3 +192,31 @@ def test_excel_locales_hoja_forzados_con_origen():
     assert sum(f[4] for f in filas[1:]) == res.resumen["nivel_sup"] + res.resumen["nivel_ger"]
     origenes = [f[0] for f in filas[1:]]
     assert origenes == sorted(origenes)                  # ordenado por local de origen
+
+
+def _mov7(cant):
+    import pandas as pd
+    return pd.DataFrame({"estadistico": [111], "origen": [7], "cantidad": [cant], "supervisor": ["sup.a1"],
+                         "gerente": ["ger.a"], "descripcion_mov": [""]})
+
+
+def test_filtro_solo_supervisor():
+    res = d.redistribuir_locales(BASE, _mov7(40), d.Parametros(dias_max=10, nivel_m2="supervisor"))
+    assert res.resumen["nivel_sup"] == 10 and res.resumen["nivel_ger"] == 0 and res.resumen["pendiente"] == 30
+    assert set(res.distribucion["Local Destino"]) == {1}
+    sug = res.pendientes[d.COL_SUG].iloc[0]
+    assert sug.startswith("3 (") or sug.startswith("4 (")          # primero otros supervisores del mismo gerente
+    assert "del mismo supervisor" in res.pendientes["Motivo"].iloc[0]
+
+
+def test_filtro_solo_gerente_incluye_locales_del_mismo_supervisor():
+    res = d.redistribuir_locales(BASE, _mov7(40), d.Parametros(dias_max=10, nivel_m2="gerente"))
+    assert res.resumen["nivel_sup"] == 0 and res.resumen["nivel_ger"] == 40 and res.resumen["pendiente"] == 0
+    assert set(res.distribucion["Nivel"]) == {d.NIVEL_GER}
+    assert {1, 3, 4} == set(res.distribucion["Local Destino"])     # L1 es del mismo supervisor y también recibe
+    assert 5 not in set(res.distribucion["Local Destino"])        # otro gerente
+
+
+def test_filtro_ambos_es_el_comportamiento_original():
+    res = d.redistribuir_locales(BASE, _mov7(40), d.Parametros(dias_max=10, nivel_m2="ambos"))
+    assert res.resumen["nivel_sup"] == 10 and res.resumen["nivel_ger"] == 30 and res.resumen["pendiente"] == 0
