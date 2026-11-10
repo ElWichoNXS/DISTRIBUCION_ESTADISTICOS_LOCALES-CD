@@ -132,7 +132,7 @@ with st.sidebar:
     with st.expander("Reglas de envío", expanded=True):
         empaque = st.checkbox("Redondear a múltiplos de EMPAQUE", value=True,
                               help="Usa la columna EMPAQUE de la base: cada local recibe empaques completos; puede quedar sobrante.")
-        filtrar_bodega = st.checkbox("Módulo 1: solo locales de la bodega de salida", value=True,
+        filtrar_bodega = st.checkbox("Solo locales de la bodega de salida", value=True,
                                      help="Usa la columna BODEGA de la base para cruzar con la bodega del inventario a mover.")
     with st.expander("📘 Cómo decide el programa"):
         st.markdown(
