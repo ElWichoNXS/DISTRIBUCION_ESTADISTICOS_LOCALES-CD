@@ -15,8 +15,8 @@ APPS = [
 
 def menu_apps(actual: str) -> None:
     """Dibuja en la barra lateral el menú de apps. `actual` = nombre de la app que se está viendo."""
-    with st.sidebar:
-        st.markdown("#### 🧭 Mis apps")
+    with st.sidebar, st.container(key="menu_apps"):
+        st.markdown("#### Mis apps")
         for nombre, icono, url in APPS:
             if nombre == actual:
                 st.button(f"{icono} {nombre}", disabled=True, width="stretch", key=f"_app_{nombre}",

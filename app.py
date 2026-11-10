@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import distribucion as d
-from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, ROJO, ROJO_OSC, alto_tabla, aplicar_estilo, grafico,
+from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, ROJO, ROJO_OSC, alto_tabla, aplicar_estilo, encabezado, grafico,
                     kpis, n, nota, pct, seccion)
 from exportar import excel_cd, excel_locales
 from plantillas import plantilla_cd, plantilla_locales
@@ -20,16 +20,21 @@ from portal import menu_apps
 
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
-VERSION_MOTOR = "2026-11-10.3"
+VERSION_MOTOR = "2026-11-10.4"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
 
+    import estilo
     import exportar
     import plantillas
-    for _m in (d, exportar, plantillas):
+    import portal
+    for _m in (d, estilo, exportar, plantillas, portal):
         importlib.reload(_m)
+    from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, ROJO, ROJO_OSC, alto_tabla,  # noqa: F811
+                        aplicar_estilo, encabezado, grafico, kpis, n, nota, pct, seccion)
     from exportar import excel_cd, excel_locales  # noqa: F811
     from plantillas import plantilla_cd, plantilla_locales  # noqa: F811
+    from portal import menu_apps  # noqa: F811
 
 F_MES = "Consumo del mes anterior (archivo)"
 F_PRON = "Pronóstico diario del BI"
@@ -155,7 +160,6 @@ modulo = st.session_state.get("modulo", M1) or M1
 hay_base = st.session_state.get("base") is not None
 hay_mov = (st.session_state.get(f"mov_{modulo == M1 and 1 or 2}") is not None
            or bool(st.session_state.get(f"_manual_{modulo == M1 and 1 or 2}")))
-paso = lambda ok: "paso ok" if ok else "paso"
 MODO_LBL = {v: k for k, v in d.MODOS_M2.items()}          # etiqueta → clave ("ambos", "supervisor", "gerente")
 modo_m2 = MODO_LBL.get(st.session_state.get("nivel_m2"), "ambos")
 SUB_M2 = {"ambos": "Mueve inventario entre locales: primero mismo supervisor, luego mismo gerente; lo demás queda para asignación manual.",
@@ -163,19 +167,9 @@ SUB_M2 = {"ambos": "Mueve inventario entre locales: primero mismo supervisor, lu
           "gerente": "Mueve inventario solo entre locales del mismo gerente; lo demás queda para asignación manual."}
 sub = ("Reparte el inventario de una bodega entre los locales habilitados según los días máximos de inventario."
        if modulo == M1 else SUB_M2[modo_m2])
-st.markdown(f"""
-<div class="hero">
-  <div>
-    <h1>Distribución de Estadísticos</h1>
-    <p>{sub}</p>
-  </div>
-  <div class="pasos">
-    <div class="{paso(hay_base)}"><b>1</b>Base de locales</div>
-    <div class="{paso(hay_mov)}"><b>2</b>Inventario a mover</div>
-    <div class="{paso(hay_base and hay_mov)}"><b>3</b>Revisar y descargar</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+encabezado("Distribución de Estadísticos", sub,
+           [("Base de locales", hay_base), ("Inventario a mover", hay_mov), ("Revisar y descargar", hay_base and hay_mov)],
+           eyebrow="Abastecimiento · " + ("Distribución CD a Locales" if modulo == M1 else "Redistribución entre locales"))
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 modulo = st.segmented_control("Módulo", [M1, M2], default=M1, key="modulo", label_visibility="collapsed") or M1
 es_m1 = modulo == M1
@@ -212,9 +206,10 @@ with c2:
                     "Usa la plantilla (Estadístico, Local de salida, Cantidad, Supervisor, Gerente) o un archivo del BI "
                     "con '# Local', 'ESTADISTICO' e 'INV NETO'.", ["PLANTILLA", "MOVER", "INV"])
     estado = st.empty()
-    st.markdown(f"""<style>.st-key-plantilla button {{ background:transparent !important; color:{ROJO} !important;
-        border:1.5px solid {ROJO} !important; box-shadow:none !important; }}
-        .st-key-plantilla button p {{ color:{ROJO} !important; }}</style>""", unsafe_allow_html=True)
+    st.markdown("""<style>.st-key-plantilla button { background:#FFFFFF !important; color:#1F2933 !important;
+        border:1px solid #D3D8DF !important; box-shadow:none !important; font-weight:600 !important; }
+        .st-key-plantilla button:hover { border-color:#E30613 !important; color:#E30613 !important; }
+        .st-key-plantilla button p { color:inherit !important; }</style>""", unsafe_allow_html=True)
     st.container(key="plantilla").download_button(
         "📄 Descargar plantilla para llenar",
         data=plantilla_cd() if es_m1 else plantilla_locales(),
@@ -408,7 +403,7 @@ def grafico_dias(dist, sub):
           tooltip=[alt.Tooltip("loc:N", title="Local"), alt.Tooltip("despues:Q", title="Días después", format=".1f"),
                    alt.Tooltip("cant:Q", title="Unidades recibidas")])
     lim = alt.Chart(pd.DataFrame({"x": [dias_max]})).mark_rule(color=ROJO, strokeDash=[6, 4], strokeWidth=2).encode(x="x:Q")
-    grafico("Días de inventario: antes → después (local · estadístico)", sub, (regla + p1 + p2 + lim).properties(height=max(200, 22 * len(dd) + 50)))
+    grafico("Días de inventario: antes → después (local · estadístico)", sub, (regla + p1 + p2 + lim).properties(height=26 * len(dd) + 60))
 
 
 def barras_apiladas(df, cat, cols, colores, titulo, sub, orden=None, alto_fila=30, leyenda=True):
@@ -417,14 +412,14 @@ def barras_apiladas(df, cat, cols, colores, titulo, sub, orden=None, alto_fila=3
     if not len(largo):
         return
     orden = orden or df.sort_values(cols[0], ascending=False)[cat].tolist()
-    ch = alt.Chart(largo).mark_bar(cornerRadiusEnd=3).encode(
+    ch = alt.Chart(largo).mark_bar(cornerRadiusEnd=4, size=18).encode(
         y=alt.Y(f"{cat}:N", sort=orden, title=None, axis=alt.Axis(labelLimit=300)),
         x=alt.X("und:Q", title=None, axis=alt.Axis(format="~s")),
         color=alt.Color("serie:N", scale=alt.Scale(domain=cols, range=colores),
                         legend=alt.Legend(title=None, orient="bottom") if (leyenda and len(cols) > 1) else None),
         order=alt.Order("serie:N"),
         tooltip=[alt.Tooltip(f"{cat}:N", title=" "), alt.Tooltip("serie:N", title="Concepto"), alt.Tooltip("und:Q", title="Unidades", format=",")]
-    ).properties(height=max(170, alto_fila * df[cat].nunique() + 60))
+    ).properties(height=alto_fila * df[cat].nunique() + (70 if (leyenda and len(cols) > 1) else 40))
     grafico(titulo, sub, ch)
 
 
@@ -460,7 +455,7 @@ if es_m1:
             h1, h2 = st.columns(2)
             with h1:
                 gg = dist.groupby("Gerente Destino", as_index=False)["Cantidad"].sum().rename(columns={"Cantidad": "Unidades"})
-                barras_apiladas(gg, "Gerente Destino", ["Unidades"], [ROJO], "Unidades por gerente",
+                barras_apiladas(gg, "Gerente Destino", ["Unidades"], ["#52606D"], "Unidades por gerente",
                                 "Cómo se reparte el inventario entre las gerencias.")
             with h2:
                 ss = dist.groupby("Supervisor Destino", as_index=False)["Cantidad"].sum().rename(columns={"Cantidad": "Unidades"})
