@@ -8,7 +8,8 @@ Módulo 1 · Distribución CD a Locales
 
 Módulo 2 · Redistribución entre locales
     Mueve el inventario de un local a otros locales sin superar los días máximos.
-    Prioridad: 1) mismo supervisor, 2) mismo gerente, 3) pendiente para asignar manualmente.
+    Prioridad: 1) mismo supervisor, 2) mismo gerente, 3) otros gerentes elegidos (opcional),
+    4) pendiente para asignar manualmente. Los locales con exceso (ya en los días máx) no reciben.
 
 Conceptos (por local + estadístico):
     venta diaria   = pronóstico diario (promedio de las columnas de fecha del BI);
@@ -24,7 +25,7 @@ Conceptos (por local + estadístico):
 from __future__ import annotations
 
 # Cambiar en cada actualización junto con VERSION_MOTOR de app.py (fuerza a recargar el motor en Streamlit Cloud).
-VERSION = "2026-11-11.4"
+VERSION = "2026-11-11.5"
 
 import heapq
 import math
@@ -322,6 +323,7 @@ class Parametros:
     filtrar_bodega: bool = True         # Módulo 1: solo locales abastecidos por la bodega de salida
     nivel_m2: str = "ambos"             # Módulo 2: "ambos" (supervisor → gerente) | "supervisor" | "gerente"
     cubrir_exhibicion: bool = True      # locales sin venta: completar la exhibición con lo que sobre
+    gerentes_extra: tuple = ()          # Módulo 2: otros gerentes cuyos locales también pueden recibir (nivel 3)
 
 
 def preparar(base: pd.DataFrame, p: Parametros, consumo_mensual: pd.DataFrame | None = None) -> pd.DataFrame:
@@ -537,7 +539,8 @@ def _obs_item(en_base, habil, q, asig, cap, pack):
 
 NIVEL_SUP = "1. Mismo supervisor"
 NIVEL_GER = "2. Mismo gerente"
-NIVEL_MAN = "3. Pendiente manual"
+NIVEL_OTR = "3. Otros gerentes"
+NIVEL_MAN = "4. Pendiente manual"
 MODOS_M2 = {
     "ambos": "Mismo supervisor y luego mismo gerente",
     "supervisor": "Solo mismo supervisor",
@@ -556,12 +559,21 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
         vacio = mov[col].map(_texto) == ""
         mov.loc[vacio, col] = mov.loc[vacio, "origen"].map(resp[col]).fillna("")
     restante = {i: int(r.cantidad) for i, r in mov.iterrows()}
-    asign_nivel = {i: {NIVEL_SUP: 0, NIVEL_GER: 0} for i in mov.index}
+    asign_nivel = {i: {NIVEL_SUP: 0, NIVEL_GER: 0, NIVEL_OTR: 0} for i in mov.index}
     recibido: dict[tuple, int] = {}       # (local, item) -> unidades ya asignadas
     filas = []
 
     modo = p.nivel_m2 if p.nivel_m2 in MODOS_M2 else "ambos"
     niveles = {"ambos": (NIVEL_SUP, NIVEL_GER), "supervisor": (NIVEL_SUP,), "gerente": (NIVEL_GER,)}[modo]
+    extra = {_texto(x) for x in (p.gerentes_extra or ()) if _texto(x)}
+    if extra:
+        niveles = niveles + (NIVEL_OTR,)
+
+    def en_filtro_base(bi, r):
+        """Locales que ya cubren los niveles 1-2 según el filtro elegido."""
+        if modo == "supervisor":
+            return (bi["supervisor"] != "") & (bi["supervisor"] == r.supervisor)
+        return (bi["gerente"] != "") & (bi["gerente"] == r.gerente)
 
     def candidatos(i, nivel, exhib=False):
         r = mov.loc[i]
@@ -570,6 +582,8 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
         bi = bi[~bi["local"].isin(origenes_item.get(g, set()))]
         if nivel == NIVEL_SUP:
             bi = bi[(bi["supervisor"] != "") & (bi["supervisor"] == r.supervisor)] if r.supervisor else bi.iloc[0:0]
+        elif nivel == NIVEL_OTR:      # locales de los otros gerentes elegidos que no entraron en los niveles 1-2
+            bi = bi[bi["gerente"].isin(extra) & ~en_filtro_base(bi, r)]
         else:
             bi = bi[(bi["gerente"] != "") & (bi["gerente"] == r.gerente)] if r.gerente else bi.iloc[0:0]
             if modo == "ambos":       # los del mismo supervisor ya se atendieron en el nivel 1
@@ -616,7 +630,7 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
     for i, r in mov.iterrows():
         g = r.estadistico
         q = int(r.cantidad)
-        a1, a2 = asign_nivel[i][NIVEL_SUP], asign_nivel[i][NIVEL_GER]
+        a1, a2, a3 = asign_nivel[i][NIVEL_SUP], asign_nivel[i][NIVEL_GER], asign_nivel[i][NIVEL_OTR]
         falta = restante[i]
         bi_all = b[(b["estadistico"] == g) & (b["motivo_no_recibe"] == "") & ~b["local"].isin(origenes_item.get(g, set()))]
         # sugerencias para asignación manual: locales fuera del filtro elegido con capacidad restante
@@ -624,11 +638,11 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
         sug = ""
         if falta > 0:
             if modo == "supervisor":
-                otros = bi_all[bi_all["supervisor"] != r.supervisor].copy()
+                otros = bi_all[(bi_all["supervisor"] != r.supervisor) & ~bi_all["gerente"].isin(extra)].copy()
                 otros["_prio"] = (otros["gerente"] != r.gerente).astype(int)
                 etiqueta = lambda x: x.supervisor.split(".")[0].title()
             else:
-                otros = bi_all[bi_all["gerente"] != r.gerente].copy()
+                otros = bi_all[(bi_all["gerente"] != r.gerente) & ~bi_all["gerente"].isin(extra)].copy()
                 otros["_prio"] = 0
                 etiqueta = lambda x: x.gerente.split(".")[0].title()
             # vectorizado: funciona también cuando no hay locales candidatos (tabla vacía)
@@ -644,18 +658,20 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
         elif falta > 0:
             grupo = {"ambos": "del mismo supervisor y gerente", "supervisor": "del mismo supervisor",
                      "gerente": "del mismo gerente"}[modo]
+            if extra:
+                grupo += " ni de los otros gerentes elegidos"
             motivo = (f"Sin capacidad suficiente en locales {grupo} hasta {p.dias_max:g} días"
                       + (" (o por redondeo a empaque)" if p.redondear_empaque else ""))
         fila = {"Local Origen": r.origen, "Supervisor Origen": r.supervisor, "Gerente Origen": r.gerente,
                 "Estadístico": g, "Descripción": _desc(b, g, r.descripcion_mov), "Cantidad a Mover": q,
-                NIVEL_SUP: a1, NIVEL_GER: a2, NIVEL_MAN: falta, "% Asignado": (a1 + a2) / q if q else 0,
+                NIVEL_SUP: a1, NIVEL_GER: a2, NIVEL_OTR: a3, NIVEL_MAN: falta, "% Asignado": (a1 + a2 + a3) / q if q else 0,
                 "Para Exhibición": exhib_i[i],
                 "Observación": motivo or "Asignado completo"}
         items.append(fila)
         if falta > 0:
             pend.append({"Local Origen": r.origen, "Supervisor Origen": r.supervisor, "Gerente Origen": r.gerente,
                          "Estadístico": g, "Descripción": fila["Descripción"], "Cantidad a Mover": q,
-                         "Asignado": a1 + a2, "Pendiente Manual": falta, "Motivo": motivo,
+                         "Asignado": a1 + a2 + a3, "Pendiente Manual": falta, "Motivo": motivo,
                          COL_SUG: sug or "Sin locales con capacidad"})
     dist = pd.DataFrame(filas)
     por_item = pd.DataFrame(items)
@@ -671,9 +687,9 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
                            "Días Actuales": round(r.dias_actuales, 1) if pd.notna(r.dias_actuales) else None})
     sm = lambda c: int(por_item[c].sum()) if len(por_item) else 0
     res = {"origenes": len(por_item), "und_mover": sm("Cantidad a Mover"), "nivel_sup": sm(NIVEL_SUP),
-           "nivel_ger": sm(NIVEL_GER), "pendiente": sm(NIVEL_MAN), "exhib": sm("Para Exhibición"), "traspasos": len(dist),
+           "nivel_ger": sm(NIVEL_GER), "nivel_otr": sm(NIVEL_OTR), "pendiente": sm(NIVEL_MAN), "exhib": sm("Para Exhibición"), "traspasos": len(dist),
            "locales": int(dist["Local Destino"].nunique()) if len(dist) else 0, "dias_max": p.dias_max,
-           "modo": modo}
+           "modo": modo, "gerentes_extra": sorted(extra)}
     return Resultado(dist, por_item, pd.DataFrame(pend), pd.DataFrame(nocons), res)
 
 

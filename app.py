@@ -20,7 +20,7 @@ import portal
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior de los módulos en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan ANTES de importar sus nombres
 # (si se importaran antes, una función nueva de estilo.py daría ImportError).
-VERSION_MOTOR = "2026-11-11.4"
+VERSION_MOTOR = "2026-11-11.5"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
     for _m in (d, estilo, exportar, plantillas, portal):
@@ -41,7 +41,9 @@ aplicar_estilo()
 
 M1 = ":material/warehouse: Distribución CD a Locales"
 M2 = ":material/sync_alt: Redistribución entre locales"
-ESC_NIVEL = alt.Scale(domain=[d.NIVEL_SUP, d.NIVEL_GER, d.NIVEL_MAN], range=[C_OK, C_ALT, C_EXT])
+NIVELES_M2 = [d.NIVEL_SUP, d.NIVEL_GER, d.NIVEL_OTR, d.NIVEL_MAN]
+COLORES_M2 = [C_OK, C_ALT, C_BAJO, C_EXT]
+ESC_NIVEL = alt.Scale(domain=NIVELES_M2, range=COLORES_M2)
 
 
 # ----------------------------------------------------------------------
@@ -148,7 +150,8 @@ with st.sidebar:
             "- Un local **sin venta** no recibe por días. Si su stock no completa la **exhibición**, recibe lo que le falta "
             "(con lo que sobra después de los locales con venta; con empaque, se envía el empaque completo).\n"
             "- **Módulo 2:** según el filtro elegido: mismo supervisor y luego mismo gerente, solo mismo supervisor o "
-            "solo mismo gerente; lo que no cabe queda **pendiente manual** con sugerencias de locales fuera del filtro.")
+            "solo mismo gerente. Si eliges **otros gerentes**, sus locales con faltante reciben después (nivel 3); "
+            "los que tienen exceso no reciben. Lo que no cabe queda **pendiente manual** con sugerencias de locales fuera del filtro.")
 params = d.Parametros(dias_max=dias_max, fuente_venta={F_MES: "mensual", F_PRON: "pronostico", F_ACU: "consumo"}[fuente],
                       dias_consumo_acu=dias_acu,
                       redondear_empaque=empaque, filtrar_bodega=filtrar_bodega, cubrir_exhibicion=cubrir_exhib)
@@ -165,8 +168,10 @@ modo_m2 = MODO_LBL.get(st.session_state.get("nivel_m2"), "ambos")
 SUB_M2 = {"ambos": "Mueve inventario entre locales: primero mismo supervisor, luego mismo gerente; lo demás queda para asignación manual.",
           "supervisor": "Mueve inventario solo entre locales del mismo supervisor; lo demás queda para asignación manual.",
           "gerente": "Mueve inventario solo entre locales del mismo gerente; lo demás queda para asignación manual."}
+ger_extra = tuple(sorted(st.session_state.get("gerentes_extra") or []))
 sub = ("Reparte el inventario de una bodega entre los locales habilitados según los días máximos de inventario."
-       if modulo == M1 else SUB_M2[modo_m2])
+       if modulo == M1 else SUB_M2[modo_m2].replace("; lo demás", ", y luego otros gerentes elegidos; lo demás")
+       if ger_extra else SUB_M2[modo_m2])
 encabezado("Distribución de Estadísticos", sub,
            [("Base de locales", hay_base), ("Inventario a mover", hay_mov), ("Revisar y descargar", hay_base and hay_mov)])
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
@@ -180,6 +185,7 @@ if not es_m1:
                              "Solo mismo gerente: reparte entre todos los locales del gerente (incluye los del mismo supervisor) "
                              "sin dar prioridad al supervisor.")
     modo_m2 = MODO_LBL[eleccion]
+    cont_ger = st.container()          # se llena cuando la base está cargada (lista de gerentes)
 params.nivel_m2 = modo_m2
 
 # ----------------------------------------------------------------------
@@ -195,6 +201,18 @@ with c1:
         chips([f"<b>{n(len(base))}</b> registros", f"<b>{base['local'].nunique()}</b> locales",
                f"<b>{base['estadistico'].nunique()}</b> estadísticos",
                f"<b>{base['gerente'].replace('', pd.NA).nunique()}</b> gerentes"])
+if not es_m1:
+    with cont_ger:
+        opciones = sorted(g for g in base["gerente"].dropna().unique() if str(g).strip()) if base is not None else []
+        st.session_state["gerentes_extra"] = [g for g in st.session_state.get("gerentes_extra", []) if g in opciones]
+        ger_extra = tuple(sorted(st.multiselect(
+            "Incluir también locales de otros gerentes", opciones, key="gerentes_extra",
+            placeholder="Elige gerentes" if opciones else "Sube la base de locales para elegir gerentes",
+            disabled=not opciones,
+            help="Después del supervisor y del gerente del local de salida, reparte a los locales de estos gerentes que "
+                 "tengan faltante (nivel 3. Otros gerentes), sin pasar los días máximos. "
+                 "Los locales con exceso de stock no reciben.")))
+    params.gerentes_extra = ger_extra
 with c2:
     clave_mod = "1" if es_m1 else "2"
     if es_m1:
@@ -336,7 +354,8 @@ def calcular(es_m1, base, mov, p_tuple, consumo, version):
 
 
 p_tuple = (params.dias_max, params.fuente_venta, params.dias_consumo_acu,
-           params.redondear_empaque, params.filtrar_bodega, params.nivel_m2, params.cubrir_exhibicion)
+           params.redondear_empaque, params.filtrar_bodega, params.nivel_m2, params.cubrir_exhibicion,
+           params.gerentes_extra)
 if consumo is not None:
     sin_consumo = sorted(set(mov["estadistico"]) - set(consumo["estadistico"]))
     if sin_consumo:
@@ -352,6 +371,8 @@ st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 a1, a2 = st.columns([3, 1.3])
 falta = r["und_sobrante"] if es_m1 else r["pendiente"]
 GRUPO_M2 = {"ambos": "del mismo supervisor y gerente", "supervisor": "del mismo supervisor", "gerente": "del mismo gerente"}
+if not es_m1 and ger_extra:
+    GRUPO_M2 = {k: v + " ni de los otros gerentes elegidos" for k, v in GRUPO_M2.items()}
 if falta > 0:
     a1.markdown(nota_html(f'Se asignan <b>{n(r["und_mover"] - falta)}</b> de <b>{n(r["und_mover"])}</b> unidades. '
                           f'Quedan <b>{n(falta)}</b> {"en el CD (sobrante)" if es_m1 else "para asignación manual"}: '
@@ -510,16 +531,20 @@ else:
               if modo_m2 != "gerente" else []),
             *([("Mismo gerente", n(r["nivel_ger"]), f"{pct(r['nivel_ger'], r['und_mover'])} del total", C_ALT)]
               if modo_m2 != "supervisor" else []),
+            *([("Otros gerentes", n(r.get("nivel_otr", 0)), f"{pct(r.get('nivel_otr', 0), r['und_mover'])} del total", C_BAJO)]
+              if ger_extra else []),
             ("Pendiente manual", n(r["pendiente"]), f"{pct(r['pendiente'], r['und_mover'])} del total", C_EXT),
-            ("Traspasos", n(r["traspasos"]), "líneas a grabar", C_BAJO),
+            ("Traspasos", n(r["traspasos"]), "líneas a grabar", C_PEND),
             ("Locales que reciben", n(r["locales"]), f"tope {dias_max:g} días", ROJO_OSC),
         ])
         nota_exhib(dist, r.get("exhib", 0))
         tot = max(r["und_mover"], 1)
-        partes = [(d.NIVEL_SUP, r["nivel_sup"], C_OK), (d.NIVEL_GER, r["nivel_ger"], C_ALT), (d.NIVEL_MAN, r["pendiente"], C_EXT)]
+        partes = [(d.NIVEL_SUP, r["nivel_sup"], C_OK), (d.NIVEL_GER, r["nivel_ger"], C_ALT),
+                  *([(d.NIVEL_OTR, r.get("nivel_otr", 0), C_BAJO)] if ger_extra else []), (d.NIVEL_MAN, r["pendiente"], C_EXT)]
         barras = "".join(f'<div style="flex:{v};background:{c}" title="{p}: {n(v)}">{pct(v, tot)}</div>' for p, v, c in partes if v > 0)
         ley = "".join(f'<span style="--c:{c}">{p}: <b>{n(v)}</b></span>' for p, v, c in partes)
-        seccion("¿Dónde se ubica el inventario?", f"Reparto de las unidades con el filtro: {d.MODOS_M2[modo_m2].lower()}.")
+        seccion("¿Dónde se ubica el inventario?", f"Reparto de las unidades con el filtro: {d.MODOS_M2[modo_m2].lower()}"
+                + (f", más los locales de {', '.join(ger_extra)}." if ger_extra else "."))
         st.markdown(f'<div class="flujo">{barras}</div><div class="leyenda">{ley}</div>', unsafe_allow_html=True)
 
         pi = res.por_item.copy()
@@ -527,12 +552,12 @@ else:
         pi["origen"] = pi["Local Origen"].astype(str) + " · " + pi["Descripción"].str.slice(0, 30).str.title()
         g1, g2 = st.columns([1.5, 1])
         with g1:
-            barras_apiladas(pi, "origen", [d.NIVEL_SUP, d.NIVEL_GER, d.NIVEL_MAN], [C_OK, C_ALT, C_EXT],
+            barras_apiladas(pi, "origen", NIVELES_M2, COLORES_M2,
                             "Cómo se ubicó cada local de salida", "Cada fila es un local de salida con su estadístico. Colores como en la barra de arriba.",
                             orden=pi.sort_values(d.NIVEL_MAN, ascending=False)["origen"].tolist(), alto_fila=26, leyenda=False)
         with g2:
-            gg = pi.groupby("Gerente Origen", as_index=False)[[d.NIVEL_SUP, d.NIVEL_GER, d.NIVEL_MAN]].sum()
-            barras_apiladas(gg, "Gerente Origen", [d.NIVEL_SUP, d.NIVEL_GER, d.NIVEL_MAN], [C_OK, C_ALT, C_EXT],
+            gg = pi.groupby("Gerente Origen", as_index=False)[NIVELES_M2].sum()
+            barras_apiladas(gg, "Gerente Origen", NIVELES_M2, COLORES_M2,
                             "Por gerente del local de salida", "Colores como en la barra de arriba.", leyenda=False)
         if len(dist):
             mx = dist.groupby(["Local Origen", "Local Destino"], as_index=False)["Cantidad"].sum()
@@ -554,7 +579,7 @@ else:
         nota("Lista para grabar: <b>local de salida → local destino · estadístico · cantidad</b>, con el nivel en que se asignó.")
         if len(dist):
             f1, f2, f3 = st.columns(3)
-            s_n = f1.multiselect("Nivel", [d.NIVEL_SUP, d.NIVEL_GER], placeholder="Todos")
+            s_n = f1.multiselect("Nivel", sorted(dist["Nivel"].unique()), placeholder="Todos")
             s_o = f2.multiselect("Local de salida", sorted(dist["Local Origen"].unique()), placeholder="Todos")
             s_it = f3.multiselect("Estadístico", sorted(dist["Estadístico"].unique()), placeholder="Todos")
             vista = filtrar(dist, [("Nivel", s_n), ("Local Origen", s_o), ("Estadístico", s_it)])

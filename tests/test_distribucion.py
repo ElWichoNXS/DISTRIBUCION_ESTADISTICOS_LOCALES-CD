@@ -267,3 +267,50 @@ def test_locales_exhibicion_despues_de_dias_en_mismo_supervisor():
     assert dist.loc[8, "Criterio"] == d.CRIT_EXHIB and dist.loc[8, "Cantidad"] == 3 and dist.loc[8, "Nivel"] == d.NIVEL_SUP
     assert res.resumen["nivel_sup"] == 13 and res.resumen["nivel_ger"] == 40 and res.resumen["pendiente"] == 7
     assert res.resumen["exhib"] == 3
+
+
+# ---------------------------------------------------------------- otros gerentes (módulo 2)
+def test_otros_gerentes_despues_de_su_gerente():
+    res = d.redistribuir_locales(BASE, _mov7(80), d.Parametros(dias_max=10, gerentes_extra=("ger.b",)))
+    dist = res.distribucion
+    assert res.resumen["nivel_sup"] == 10 and res.resumen["nivel_ger"] == 40
+    otr = dist[dist["Nivel"] == d.NIVEL_OTR]
+    # L5 (ger.b) recibe por días (capacidad 20) y luego L6 (ger.b, sin venta) completa exhibición (4)
+    assert otr.set_index("Local Destino")["Cantidad"].to_dict() == {5: 20, 6: 4}
+    assert res.resumen["nivel_otr"] == 24 and res.resumen["pendiente"] == 6
+    assert "otros gerentes elegidos" in res.pendientes["Motivo"].iloc[0]
+
+
+def test_otros_gerentes_con_exceso_no_reciben():
+    b = BASE.copy()
+    b.loc[b.local == 5, "inv_neto"] = 100                            # 50 días: exceso
+    res = d.redistribuir_locales(b, _mov7(80), d.Parametros(dias_max=10, gerentes_extra=("ger.b",),
+                                                            cubrir_exhibicion=False))
+    assert 5 not in set(res.distribucion["Local Destino"])
+    assert res.resumen["nivel_otr"] == 0 and res.resumen["pendiente"] == 30
+
+
+def test_otros_gerentes_sin_elegir_no_cambia_nada():
+    res = d.redistribuir_locales(BASE, _mov7(80), d.Parametros(dias_max=10))
+    assert res.resumen["nivel_otr"] == 0 and d.NIVEL_OTR not in set(res.distribucion["Nivel"])
+
+
+def test_otros_gerentes_con_filtro_solo_supervisor():
+    res = d.redistribuir_locales(BASE, _mov7(40), d.Parametros(dias_max=10, nivel_m2="supervisor", gerentes_extra=("ger.b",),
+                                                              cubrir_exhibicion=False))
+    dist = res.distribucion
+    assert set(dist.loc[dist["Nivel"] == d.NIVEL_OTR, "Local Destino"]) == {5}   # no los otros supervisores de ger.a
+    assert res.resumen["nivel_sup"] == 10 and res.resumen["nivel_otr"] == 20 and res.resumen["pendiente"] == 10
+    assert not res.pendientes[d.COL_SUG].iloc[0].startswith("5 (")             # ger.b ya está en el filtro
+
+
+def test_excel_locales_con_otros_gerentes():
+    import io
+    import openpyxl
+    from exportar import excel_locales
+    p = d.Parametros(dias_max=10, gerentes_extra=("ger.b",))
+    res = d.redistribuir_locales(BASE, _mov7(80), p)
+    ws = openpyxl.load_workbook(io.BytesIO(excel_locales(res, p)))["RESUMEN"]
+    cab = [c.value for c in ws[8]]
+    assert cab[8] == d.NIVEL_OTR and cab[9] == d.NIVEL_MAN
+    assert "ger.b" in ws["A2"].value

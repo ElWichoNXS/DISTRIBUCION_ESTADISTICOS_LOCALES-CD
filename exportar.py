@@ -12,7 +12,7 @@ from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from distribucion import MODOS_M2, NIVEL_GER, NIVEL_MAN, NIVEL_SUP, Parametros, Resultado
+from distribucion import MODOS_M2, NIVEL_GER, NIVEL_MAN, NIVEL_OTR, NIVEL_SUP, Parametros, Resultado
 
 ROJO, ROJO_OSC = "E30613", "A30410"
 C_OK, C_ALT, C_BAJO, C_PEND = "1FA391", "4B86E6", "D39A2E", "8C8C8C"
@@ -83,7 +83,8 @@ def _encabezado_resumen(ws, titulo, p: Parametros, kpis: list[tuple]):
                 f" · Stock = INV NETO + ROQ LTC + ROQ PTL"
                 f" · {'Redondeo a múltiplos de EMPAQUE' if p.redondear_empaque else 'Unidades sueltas'}"
                 f" · {'Locales sin venta: se completa la exhibición' if p.cubrir_exhibicion else 'Locales sin venta: no reciben'}"
-                + (f" · Redistribución: {MODOS_M2.get(p.nivel_m2, '').lower()}" if titulo.startswith("REDISTRIB") else ""))
+                + (f" · Redistribución: {MODOS_M2.get(p.nivel_m2, '').lower()}" if titulo.startswith("REDISTRIB") else "")
+                + (f" · Otros gerentes: {', '.join(p.gerentes_extra)}" if titulo.startswith("REDISTRIB") and p.gerentes_extra else ""))
     ws["A2"].font = Font(italic=True, size=9, color="595959")
     for k, (lbl, val) in enumerate(kpis):
         c = 1 + k * 2
@@ -201,29 +202,31 @@ def excel_locales(res: Resultado, p: Parametros) -> bytes:
     r = res.resumen
     _encabezado_resumen(ws, "REDISTRIBUCIÓN ENTRE LOCALES", p, [
         ("Und. a mover", r["und_mover"]), ("Mismo supervisor", r["nivel_sup"]), ("Mismo gerente", r["nivel_ger"]),
+        *([("Otros gerentes", r.get("nivel_otr", 0))] if p.gerentes_extra else []),
         ("Pendiente manual", r["pendiente"]), ("Traspasos", r["traspasos"]), ("Locales que reciben", r["locales"])])
     pi = res.por_item.copy()
     if len(pi):
         tabla = pi[["Local Origen", "Supervisor Origen", "Gerente Origen", "Estadístico", "Descripción",
-                    "Cantidad a Mover", NIVEL_SUP, NIVEL_GER, NIVEL_MAN, "% Asignado", "Para Exhibición", "Observación"]]
+                    "Cantidad a Mover", NIVEL_SUP, NIVEL_GER, NIVEL_OTR, NIVEL_MAN, "% Asignado", "Para Exhibición",
+                    "Observación"]]
         ini = 8
         fin = _escribir_tabla(ws, tabla, ini)
-        ws.conditional_formatting.add(f"I{ini + 1}:I{fin}", CellIsRule(operator="greaterThan", formula=["0"],
+        ws.conditional_formatting.add(f"J{ini + 1}:J{fin}", CellIsRule(operator="greaterThan", formula=["0"],
                                       fill=F_ROJO, font=Font(bold=True, color=ROJO)))
         # gráfico 1: por nivel (total)
-        aux_c = 14
+        aux_c = 15
         ws.cell(ini, aux_c, "Nivel")
         ws.cell(ini, aux_c + 1, "Unidades")
         for i, (lbl, v) in enumerate([("Mismo supervisor", r["nivel_sup"]), ("Mismo gerente", r["nivel_ger"]),
-                                      ("Pendiente manual", r["pendiente"])], ini + 1):
+                                      ("Otros gerentes", r.get("nivel_otr", 0)), ("Pendiente manual", r["pendiente"])], ini + 1):
             ws.cell(i, aux_c, lbl)
             ws.cell(i, aux_c + 1, v)
         ch = BarChart()
         ch.type, ch.style, ch.title = "col", 10, "Unidades por nivel de asignación"
-        ch.add_data(Reference(ws, min_col=aux_c + 1, min_row=ini, max_row=ini + 3), titles_from_data=True)
-        ch.set_categories(Reference(ws, min_col=aux_c, min_row=ini + 1, max_row=ini + 3))
+        ch.add_data(Reference(ws, min_col=aux_c + 1, min_row=ini, max_row=ini + 4), titles_from_data=True)
+        ch.set_categories(Reference(ws, min_col=aux_c, min_row=ini + 1, max_row=ini + 4))
         from openpyxl.chart.series import DataPoint
-        for k, color in enumerate([C_OK, C_ALT, ROJO]):
+        for k, color in enumerate([C_OK, C_ALT, C_BAJO, ROJO]):
             pt = DataPoint(idx=k)
             pt.graphicalProperties.solidFill = color
             pt.graphicalProperties.line.solidFill = color
@@ -237,18 +240,18 @@ def excel_locales(res: Resultado, p: Parametros) -> bytes:
         ch.visible_cells_only = False
         ws.add_chart(ch, f"A{fin + 3}")
         # gráfico 2: por gerente de origen, apilado por nivel
-        g = pi.groupby("Gerente Origen")[[NIVEL_SUP, NIVEL_GER, NIVEL_MAN]].sum().reset_index()
-        g2 = ini + 6
-        for j, h in enumerate(["Gerente", "Mismo supervisor", "Mismo gerente", "Pendiente manual"]):
+        g = pi.groupby("Gerente Origen")[[NIVEL_SUP, NIVEL_GER, NIVEL_OTR, NIVEL_MAN]].sum().reset_index()
+        g2 = ini + 7
+        for j, h in enumerate(["Gerente", "Mismo supervisor", "Mismo gerente", "Otros gerentes", "Pendiente manual"]):
             ws.cell(g2, aux_c + j, h)
         for i, row in enumerate(g.itertuples(index=False), g2 + 1):
             ws.cell(i, aux_c, str(row[0]) or "(sin gerente)")
-            for j in range(3):
+            for j in range(4):
                 ws.cell(i, aux_c + 1 + j, int(row[1 + j]))
         _grafico_barras(ws, "Unidades por gerente del local de origen", g2, g2 + len(g), aux_c,
-                        [aux_c + 1, aux_c + 2, aux_c + 3], [C_OK, C_ALT, ROJO], f"H{fin + 3}",
+                        [aux_c + 1, aux_c + 2, aux_c + 3, aux_c + 4], [C_OK, C_ALT, C_BAJO, ROJO], f"H{fin + 3}",
                         alto=max(8, 0.8 * len(g) + 3), ancho=18)
-        for c in range(aux_c, aux_c + 4):
+        for c in range(aux_c, aux_c + 5):
             ws.column_dimensions[get_column_letter(c)].hidden = True
     ws.freeze_panes = "A8"
     _hoja_forzados(wb, res.distribucion, con_origen=True)
