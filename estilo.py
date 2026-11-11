@@ -1,4 +1,4 @@
-"""Estilo visual de la app (mismo lenguaje que las apps Min/Max y Verificación de traspasos).
+"""Estilo visual compartido por las apps de abastecimiento (Distribución, Min/Max y Verificación de traspasos).
 
 Dirección: herramienta de trabajo diaria para abastecimiento. Una sola pieza fuerte —la franja roja del
 encabezado con los pasos— y todo lo demás sobrio: superficies blancas, líneas finas, números tabulares.
