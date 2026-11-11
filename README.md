@@ -76,5 +76,6 @@ exportar.py       Excel de resultados con gráficos
 plantillas.py     plantillas descargables para ingresar el inventario a mover
 estilo.py         estilo visual compartido
 portal.py         menú "Mis apps"
+PLANTILLA_NUEVA_APP.md  prompt y esqueleto para crear otra app con el mismo diseño
 tests/            pruebas con datos de ejemplo
 ```
