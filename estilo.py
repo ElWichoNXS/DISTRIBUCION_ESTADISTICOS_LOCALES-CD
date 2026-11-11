@@ -56,13 +56,13 @@ h1, h2, h3, h4, h5 {{ color:{TINTA}; font-stretch:87.5%; }}
 .paso.actual .nodo {{ background:#fff; border-color:#fff; color:{ROJO}; box-shadow:0 0 0 5px rgba(255,255,255,.28); }}
 .paso.hecho .txt, .paso.actual .txt {{ color:#fff; }}
 
-/* ================= KPIs: una sola franja con divisiones ================= */
-.kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); background:{SUPERFICIE};
-    border:1px solid {LINEA}; border-radius:10px; margin:10px 0 14px 0; overflow:hidden; }}
-.kpi {{ padding:16px 20px 18px 20px; border-left:1px solid {LINEA}; margin-left:-1px; }}
-.kpi .l {{ font-size:.82rem; font-weight:600; color:{GRAFITO}; display:flex; align-items:center; gap:7px; }}
-.kpi .l::before {{ content:""; width:8px; height:8px; border-radius:2px; background:var(--ac, {ROJO}); flex:none; }}
-.kpi .v {{ font-size:2.1rem; font-weight:700; font-stretch:80%; line-height:1.1; margin-top:6px; color:{TINTA};
+/* ================= KPIs: tarjetas separadas con color ================= */
+.kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:12px 0 14px 0; }}
+.kpi {{ background:{SUPERFICIE}; border:1px solid {LINEA}; border-radius:10px; padding:15px 18px 16px 18px;
+    position:relative; overflow:hidden; }}
+.kpi::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--ac, {ROJO}); }}
+.kpi .l {{ font-size:.8rem; font-weight:600; color:{GRAFITO}; line-height:1.25; }}
+.kpi .v {{ font-size:2.1rem; font-weight:700; font-stretch:80%; line-height:1.1; margin-top:6px; color:var(--ac, {TINTA});
     font-variant-numeric:tabular-nums; letter-spacing:-.01em; }}
 .kpi .s {{ font-size:.78rem; color:{NIEBLA_TXT}; margin-top:2px; }}
 
@@ -143,13 +143,45 @@ div[data-testid="stButtonGroup"] button[aria-checked="true"] p {{ color:{TINTA} 
 div[data-testid="stButtonGroup"] button[aria-checked="true"] [data-testid="stIconMaterial"] {{ color:{ROJO}; }}
 div[data-testid="stButtonGroup"] [data-testid="stIconMaterial"] {{ font-size:1.15rem; }}
 
-/* ================= Pestañas ================= */
-div[data-baseweb="tab-list"] {{ gap:22px; border-bottom:1px solid {LINEA}; margin-top:14px; }}
-button[data-baseweb="tab"] {{ padding:0 2px 10px 2px; }}
-button[data-baseweb="tab"] p {{ font-weight:600; color:{GRAFITO}; font-size:.92rem; }}
-button[data-baseweb="tab"][aria-selected="true"] p {{ color:{TINTA} !important; }}
-div[data-baseweb="tab-highlight"] {{ background-color:{ROJO}; height:2px; }}
-div[data-baseweb="tab-border"] {{ display:none; }}
+/* ================= Pestañas: pastillas, la activa en rojo =================
+   Streamlit nuevo usa role="tablist"/stTab; las versiones anteriores, baseweb. Se cubren ambas. */
+div[data-baseweb="tab-list"], [data-testid="stTabs"] [role="tablist"] {{ gap:4px; background:{SUPERFICIE};
+    border:1px solid {LINEA}; border-radius:10px; padding:4px; margin-top:14px; width:fit-content; max-width:100%;
+    overflow-x:auto; }}
+button[data-baseweb="tab"], [data-testid="stTab"] {{ border-radius:7px; padding:8px 16px !important; height:auto;
+    margin:0 !important; transition:background .15s; }}
+button[data-baseweb="tab"] p, [data-testid="stTab"] p {{ font-weight:600; color:{GRAFITO}; font-size:.92rem; }}
+button[data-baseweb="tab"]:hover, [data-testid="stTab"]:hover {{ background:{FONDO}; }}
+button[data-baseweb="tab"][aria-selected="true"], [data-testid="stTab"][aria-selected="true"] {{ background:{ROJO}; }}
+button[data-baseweb="tab"][aria-selected="true"] p, [data-testid="stTab"][aria-selected="true"] p {{ color:#fff !important; }}
+div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"], [data-testid="stTabs"] .react-aria-SelectionIndicator
+    {{ display:none !important; }}
+
+/* ================= Chips de estado al cargar archivos ================= */
+.chips {{ display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 2px 0; }}
+.chip {{ display:inline-flex; align-items:center; gap:5px; background:{FONDO}; color:{GRAFITO}; border:1px solid {LINEA};
+    border-radius:999px; padding:3px 10px; font-size:.8rem; font-weight:500; font-variant-numeric:tabular-nums; }}
+.chip b {{ color:{TINTA}; font-weight:700; }}
+.chip.ok {{ background:#E7F4F1; border-color:#BFE3DC; color:#0F6B5F; }}
+.chip.ok b {{ color:#0F6B5F; }}
+.chip .ms {{ font-size:1rem; vertical-align:0; }}
+
+/* ================= Estado vacío ================= */
+.vacio {{ background:{SUPERFICIE}; border:1.5px dashed {LINEA_2}; border-radius:10px; padding:28px 24px; margin-top:18px;
+    text-align:center; }}
+.vacio .ico {{ width:50px; height:50px; border-radius:12px; background:{ROJO_SUAVE}; color:{ROJO}; display:inline-flex;
+    align-items:center; justify-content:center; margin-bottom:10px; }}
+.vacio .ico .ms {{ font-size:1.7rem; vertical-align:0; }}
+.vacio h3 {{ font-size:1.15rem !important; font-weight:700; margin:0 0 4px 0; padding:0; }}
+.vacio p {{ color:{GRAFITO}; font-size:.9rem; margin:0 auto; max-width:60ch; }}
+.vacio .pv-lista {{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:16px; }}
+.vacio .pv {{ display:flex; align-items:center; gap:8px; background:{FONDO}; border:1px solid {LINEA}; border-radius:8px;
+    padding:7px 12px; font-size:.84rem; color:{GRAFITO}; font-weight:600; }}
+.vacio .pv i {{ font-style:normal; width:20px; height:20px; border-radius:50%; background:{SUPERFICIE}; border:1px solid {LINEA_2};
+    display:inline-flex; align-items:center; justify-content:center; font-size:.72rem; font-weight:700; }}
+.vacio .pv.ok {{ background:#E7F4F1; border-color:#BFE3DC; color:#0F6B5F; }}
+.vacio .pv.ok i {{ background:{C_OK}; border-color:{C_OK}; color:#fff; }}
+.vacio .pv i .ms {{ font-size:.85rem; vertical-align:0; }}
 
 /* ================= Paneles de gráficos, tablas, desplegables ================= */
 div[class*="st-key-tarjeta"] {{ background:{SUPERFICIE}; border:1px solid {LINEA}; border-radius:10px; padding:18px 20px 12px 20px; }}
@@ -165,6 +197,7 @@ hr {{ border-color:{LINEA}; }}
 
 @media (max-width: 760px) {{
   .hero {{ padding:20px; }} .hero h1 {{ font-size:1.6rem; }}
+  .kpis {{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }} .kpi .v {{ font-size:1.7rem; }}
   .paso {{ width:96px; }}
 }}
 @media (prefers-reduced-motion: reduce) {{ * {{ transition:none !important; }} }}
@@ -210,6 +243,21 @@ def kpis(items):
         f'<div class="kpi" style="--ac:{c}"><div class="l">{l}</div><div class="v">{v}</div><div class="s">{s}</div></div>'
         for l, v, s, c in items)
     st.markdown(f'<div class="kpis">{html}</div>', unsafe_allow_html=True)
+
+
+def chips(items):
+    """Chips de estado bajo un archivo cargado. items: textos con HTML; el primero va en verde con check."""
+    html = "".join(f'<span class="chip ok">{ico("check_circle")}{t}</span>' if i == 0 else f'<span class="chip">{t}</span>'
+                   for i, t in enumerate(items))
+    st.markdown(f'<div class="chips">{html}</div>', unsafe_allow_html=True)
+
+
+def vacio(titulo, texto, pasos):
+    """Tarjeta de estado vacío que muestra qué archivos faltan. pasos: (etiqueta, completado)."""
+    pv = "".join(f'<div class="pv{" ok" if ok else ""}"><i>{ico("check") if ok else i + 1}</i>{lbl}</div>'
+                 for i, (lbl, ok) in enumerate(pasos))
+    st.markdown(f'<div class="vacio"><div class="ico">{ico("upload_file")}</div><h3>{titulo}</h3><p>{texto}</p>'
+                f'<div class="pv-lista">{pv}</div></div>', unsafe_allow_html=True)
 
 
 def nota_html(texto, tipo=""):

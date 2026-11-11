@@ -12,29 +12,25 @@ import pandas as pd
 import streamlit as st
 
 import distribucion as d
-from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, NEUTRO, ROJO, ROJO_OSC, alto_tabla, aplicar_estilo, encabezado,
-                    grafico, kpis, n, nota, nota_html, pct, seccion)
-from exportar import excel_cd, excel_locales
-from plantillas import plantilla_cd, plantilla_locales
-from portal import menu_apps
+import estilo
+import exportar
+import plantillas
+import portal
 
-# Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior del motor en memoria
-# (después de actualizar el repositorio). Si las versiones no coinciden, se recargan los módulos.
-VERSION_MOTOR = "2026-11-10.7"
+# Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior de los módulos en memoria
+# (después de actualizar el repositorio). Si las versiones no coinciden, se recargan ANTES de importar sus nombres
+# (si se importaran antes, una función nueva de estilo.py daría ImportError).
+VERSION_MOTOR = "2026-11-11.1"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
-
-    import estilo
-    import exportar
-    import plantillas
-    import portal
     for _m in (d, estilo, exportar, plantillas, portal):
         importlib.reload(_m)
-    from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, NEUTRO, ROJO, ROJO_OSC, alto_tabla,  # noqa: F811
-                        aplicar_estilo, encabezado, grafico, kpis, n, nota, nota_html, pct, seccion)
-    from exportar import excel_cd, excel_locales  # noqa: F811
-    from plantillas import plantilla_cd, plantilla_locales  # noqa: F811
-    from portal import menu_apps  # noqa: F811
+
+from estilo import (C_ALT, C_BAJO, C_EXT, C_OK, C_PEND, NEUTRO, ROJO, ROJO_OSC, alto_tabla,  # noqa: E402
+                    aplicar_estilo, chips, encabezado, grafico, kpis, n, nota, nota_html, pct, seccion, vacio)
+from exportar import excel_cd, excel_locales  # noqa: E402
+from plantillas import plantilla_cd, plantilla_locales  # noqa: E402
+from portal import menu_apps  # noqa: E402
 
 F_MES = "Consumo del mes anterior (archivo)"
 F_PRON = "Pronóstico diario del BI"
@@ -117,7 +113,7 @@ if "dias_acu" not in st.session_state:
 with st.sidebar:
     st.header("Parámetros")
     dias_max = st.number_input("Días máximos de inventario en el local", min_value=1.0, max_value=180.0, value=15.0,
-                               step=1.0, help="Ningún local queda con más de estos días de inventario después del traspaso.")
+                               step=1.0, format="%g", help="Ningún local queda con más de estos días de inventario después del traspaso.")
     with st.expander("Venta diaria y stock", expanded=True):
         fuente = st.radio("Venta diaria", [F_MES, F_PRON, F_ACU], index=2,
                           help="Mes anterior: consumo acumulado del archivo de consumo ÷ días de ese mes (ej. octubre ÷ 31). "
@@ -125,7 +121,7 @@ with st.sidebar:
                                "CONSUMOS ACU: CONSUMOS ACU ÷ los días de abajo. "
                                "Si un estadístico no tiene dato en la fuente elegida, se usa el pronóstico (y si falta, CONSUMOS ACU).")
         c_dias, c_cal = st.columns([4, 1], vertical_alignment="bottom")
-        dias_acu = c_dias.number_input("CONSUMOS ACU representa (días)", min_value=1.0, step=1.0, key="dias_acu",
+        dias_acu = c_dias.number_input("CONSUMOS ACU representa (días)", min_value=1.0, step=1.0, format="%g", key="dias_acu",
                                        help="Venta diaria = CONSUMOS ACU ÷ este número. Con el botón del calendario se calcula solo: "
                                             "días transcurridos del mes hasta la fecha elegida (10/11 → 9 días).")
         with c_cal.popover("", icon=":material/calendar_month:", help="Elegir la fecha para contar los días transcurridos del mes"):
@@ -192,8 +188,9 @@ with c1:
                  "Una fila por local + estadístico: '# Local', 'ESTADISTICO', 'SUPERV.', 'GERENTE', 'INV NETO', "
                  "'ROQ_LTC', 'ROQ_PTL', 'CONSUMOS ACU' y las columnas de pronóstico por fecha.", ["BASE", "INVENTARIO"])
     if base is not None:
-        st.caption(f":green[:material/check_circle:] {n(len(base))} registros, {base['local'].nunique()} locales, "
-                   f"{base['estadistico'].nunique()} estadísticos y {base['gerente'].replace('', pd.NA).nunique()} gerentes")
+        chips([f"<b>{n(len(base))}</b> registros", f"<b>{base['local'].nunique()}</b> locales",
+               f"<b>{base['estadistico'].nunique()}</b> estadísticos",
+               f"<b>{base['gerente'].replace('', pd.NA).nunique()}</b> gerentes"])
 with c2:
     clave_mod = "1" if es_m1 else "2"
     if es_m1:
@@ -286,8 +283,9 @@ with c2:
     if not es_m1 and mov is not None and maestro is not None and len(maestro):
         mov = d.completar_responsables(mov, maestro)
     if mov is not None and len(mov):
-        estado.caption(f":green[:material/check_circle:] {len(mov)} registros, {n(mov['cantidad'].sum())} unidades a mover "
-                       f"y {mov['estadistico'].nunique()} estadísticos")
+        with estado:
+            chips([f"<b>{len(mov)}</b> registros", f"<b>{n(mov['cantidad'].sum())}</b> unidades a mover",
+                   f"<b>{mov['estadistico'].nunique()}</b> estadísticos"])
 
 # ---- consumo del mes anterior (export del BI, uno o varios archivos)
 consumo = None
@@ -314,8 +312,10 @@ if params.fuente_venta == "mensual":
         nota("Sube el export de consumo del mes anterior. Mientras no lo subas, se usa el <b>pronóstico diario del BI</b>.", "warn")
 
 if base is None or mov is None or not len(mov):
-    nota("Sube la base de locales habilitados y el inventario a mover (o digítalo) para ver la distribución y descargar el Excel. "
-         "Ajusta los <b>días máximos</b> en la barra lateral.")
+    vacio("Carga los archivos para ver la distribución",
+          "Sube la base de locales habilitados y el inventario a mover (o digítalo). Los gráficos y el Excel de resultados "
+          "aparecen aquí. Ajusta los <b>días máximos</b> en la barra lateral.",
+          [("Base de locales", base is not None), ("Inventario a mover", mov is not None and len(mov) > 0)])
     st.stop()
 
 
