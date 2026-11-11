@@ -7,6 +7,10 @@ Tipografía: Archivo (grotesca de alto rendimiento; ancho semicondensado para t�
 import altair as alt
 import streamlit as st
 
+# Súbela al cambiar estilo.py o portal.py: las apps comparan este número y recargan los módulos
+# (Streamlit Cloud a veces conserva en memoria la versión anterior tras actualizar el repositorio).
+VERSION = "2026-11-11.2"
+
 # ---- Marca
 ROJO, ROJO_OSC = "#E30613", "#A30410"
 # ---- Neutros
@@ -88,7 +92,7 @@ h1, h2, h3, h4, h5 {{ color:{TINTA}; font-stretch:87.5%; }}
 /* ================= Barra lateral ================= */
 section[data-testid="stSidebar"] {{ background:{SUPERFICIE}; border-right:1px solid {LINEA}; }}
 section[data-testid="stSidebar"] h2 {{ color:{TINTA} !important; font-size:1.05rem; font-weight:700; padding-top:.4rem; }}
-section[data-testid="stSidebar"] h4 {{ color:{NIEBLA_TXT} !important; font-size:.8rem; font-weight:600; margin-bottom:-6px; }}
+section[data-testid="stSidebar"] h4 {{ color:{NIEBLA_TXT} !important; font-size:.8rem; font-weight:600; margin-bottom:2px; }}
 section[data-testid="stSidebar"] hr {{ margin:14px 0 6px 0; }}
 .st-key-menu_apps {{ gap:2px !important; }}
 .st-key-menu_apps a, .st-key-menu_apps button {{ justify-content:flex-start !important; border:none !important;
@@ -101,7 +105,9 @@ section[data-testid="stSidebar"] hr {{ margin:14px 0 6px 0; }}
 .st-key-menu_apps p span[role="img"] {{ font-size:1.15rem; vertical-align:middle !important; }}
 .st-key-menu_apps a:hover {{ background:{FONDO} !important; color:{TINTA} !important; }}
 .st-key-menu_apps a p, .st-key-menu_apps button p {{ color:inherit !important; }}
-.st-key-menu_apps button:disabled {{ background:{ROJO_SUAVE} !important; color:{ROJO_OSC} !important; opacity:1 !important;
+.st-key-menu_apps [class*="st-key-app_pendiente"] button:disabled {{ background:transparent !important;
+    color:{NIEBLA_TXT} !important; box-shadow:none !important; opacity:1 !important; cursor:not-allowed; }}
+.st-key-menu_apps .st-key-app_actual button:disabled {{ background:{ROJO_SUAVE} !important; color:{ROJO_OSC} !important; opacity:1 !important;
     font-weight:600 !important; box-shadow:inset 3px 0 0 {ROJO} !important; border-radius:0 6px 6px 0 !important; }}
 section[data-testid="stSidebar"] div[data-testid="stExpander"] {{ box-shadow:none; }}
 

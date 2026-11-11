@@ -20,7 +20,7 @@ import portal
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior de los módulos en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan ANTES de importar sus nombres
 # (si se importaran antes, una función nueva de estilo.py daría ImportError).
-VERSION_MOTOR = "2026-11-11.1"
+VERSION_MOTOR = "2026-11-11.2"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
     for _m in (d, estilo, exportar, plantillas, portal):
