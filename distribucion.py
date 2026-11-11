@@ -16,16 +16,18 @@ Conceptos (por local + estadístico):
     stock actual   = INV NETO + ROQ_LTC + ROQ_PTL   (INV NETO ya incluye el tránsito)
     días actuales  = stock actual ÷ venta diaria
     capacidad      = días máx × venta diaria − stock actual  (nunca negativa)
-    Un local sin venta no recibe (no se envía producto donde no rota).
+    Un local sin venta no recibe por días; si su stock no completa la exhibición (Uni Exhibición),
+    recibe solo lo que le falta para completarla, con lo que sobre después de nivelar los locales con venta.
     La base ya viene filtrada con los locales habilitados: no se aplican exclusiones adicionales.
     Redondeo opcional a múltiplos de EMPAQUE.
 """
 from __future__ import annotations
 
 # Cambiar en cada actualización junto con VERSION_MOTOR de app.py (fuerza a recargar el motor en Streamlit Cloud).
-VERSION = "2026-11-11.3"
+VERSION = "2026-11-11.4"
 
 import heapq
+import math
 import io
 import re
 import unicodedata
@@ -319,6 +321,7 @@ class Parametros:
     redondear_empaque: bool = False
     filtrar_bodega: bool = True         # Módulo 1: solo locales abastecidos por la bodega de salida
     nivel_m2: str = "ambos"             # Módulo 2: "ambos" (supervisor → gerente) | "supervisor" | "gerente"
+    cubrir_exhibicion: bool = True      # locales sin venta: completar la exhibición con lo que sobre
 
 
 def preparar(base: pd.DataFrame, p: Parametros, consumo_mensual: pd.DataFrame | None = None) -> pd.DataFrame:
@@ -347,6 +350,9 @@ def preparar(base: pd.DataFrame, p: Parametros, consumo_mensual: pd.DataFrame | 
     b["stock"] = (b["inv_neto"] + b["roq_ltc"].clip(lower=0) + b["roq_ptl"].clip(lower=0)).clip(lower=0)
     b["dias_actuales"] = (b["stock"] / b["venta_diaria"]).where(b["venta_diaria"] > 0)
     b["capacidad"] = (p.dias_max * b["venta_diaria"] - b["stock"]).clip(lower=0).fillna(0).apply(lambda x: int(x + 1e-9))
+    # unidades que le faltan a un local sin venta para completar su exhibición
+    falta = (b["exhibicion"] - b["stock"]).clip(lower=0).fillna(0).apply(lambda x: int(math.ceil(x - 1e-9)))
+    b["falta_exhib"] = falta.where((b["venta_diaria"] <= 0) & p.cubrir_exhibicion, 0).astype(int)
 
     def motivo(r):
         if r.venta_diaria <= 0:
@@ -389,6 +395,41 @@ def nivelar(cantidad: int, cand: pd.DataFrame, asignado_previo: dict, dias_max: 
     return asign
 
 
+def llenar_exhibicion(cantidad: int, cand: pd.DataFrame, asignado_previo: dict, paso: int = 1) -> dict:
+    """
+    Locales sin venta: entrega de a `paso` unidades al local con menor % de exhibición cubierta,
+    hasta completar su exhibición o hasta que no quede inventario. cand: index=local, cols stock, exhibicion.
+    Con empaque, el último empaque puede pasar un poco la exhibición (se envían empaques completos).
+    """
+    asign: dict[int, int] = {}
+    heap = []
+    for l, r in cand.iterrows():
+        e = r["exhibicion"]
+        s = r["stock"] + asignado_previo.get(l, 0)
+        if e > 0 and s < e:
+            heapq.heappush(heap, (s / e, l, s, e))
+    restante = cantidad
+    while heap and restante >= paso:
+        _, l, s, e = heapq.heappop(heap)
+        asign[l] = asign.get(l, 0) + paso
+        restante -= paso
+        s += paso
+        if s < e:
+            heapq.heappush(heap, (s / e, l, s, e))
+    return asign
+
+
+CRIT_DIAS = "Días de inventario"
+CRIT_EXHIB = "Exhibición (sin venta)"
+MOT_EXHIB = "SIN VENTA: FALTA EXHIBICIÓN"   # no sobró inventario para completarla
+
+
+def _motivo_no_recibe(r, recibio: bool = False) -> str:
+    if r.motivo_no_recibe == "SIN VENTA" and getattr(r, "falta_exhib", 0) > 0 and not recibio:
+        return MOT_EXHIB
+    return r.motivo_no_recibe
+
+
 @dataclass
 class Resultado:
     distribucion: pd.DataFrame          # una fila por traspaso (origen → destino)
@@ -398,10 +439,10 @@ class Resultado:
     resumen: dict = field(default_factory=dict)
 
 
-def _fila_destino(r, asignado, previo, dias_max):
+def _fila_destino(r, asignado, previo, dias_max, criterio=CRIT_DIAS):
     v = r.venta_diaria
     stock_final = r.stock + previo + asignado
-    return {
+    return {"Criterio": criterio,
         "Local Destino": r.local, "Nombre Destino": r.designacion.title(), "Supervisor Destino": r.supervisor,
         "Gerente Destino": r.gerente, "Venta Diaria": round(v, 3), "Fuente Venta": getattr(r, "fuente_venta", ""),
         "Stock Actual": r.stock,
@@ -426,29 +467,36 @@ def distribuir_cd(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
         pack = _empaque_item(bi) if (p.redondear_empaque and len(bi)) else 1
         cand = bi[bi["motivo_no_recibe"] == ""].set_index("local")
         asign = nivelar(q, cand, {}, p.dias_max, pack)
-        for l, a in sorted(asign.items(), key=lambda t: -t[1]):
-            r = cand.loc[l]
-            f = {"Origen": f"CD {int(bodega)}" if bodega is not None and not pd.isna(bodega) else "CD",
-                 "Estadístico": g, "Descripción": desc}
-            f.update(_fila_destino(_Fila(l, r), a, 0, p.dias_max))
-            filas.append(f)
-        for r in bi[bi["motivo_no_recibe"] != ""].itertuples(index=False):
+        # lo que sobra completa la exhibición de los locales sin venta
+        cand_ex = bi[bi["falta_exhib"] > 0].set_index("local")
+        asign_ex = llenar_exhibicion(q - sum(asign.values()), cand_ex, {}, pack) if len(cand_ex) else {}
+        origen = f"CD {int(bodega)}" if bodega is not None and not pd.isna(bodega) else "CD"
+        for tabla_c, asg, crit in ((cand, asign, CRIT_DIAS), (cand_ex, asign_ex, CRIT_EXHIB)):
+            for l, a in sorted(asg.items(), key=lambda t: -t[1]):
+                f = {"Origen": origen, "Estadístico": g, "Descripción": desc}
+                f.update(_fila_destino(_Fila(l, tabla_c.loc[l]), a, 0, p.dias_max, crit))
+                filas.append(f)
+        for r in bi[(bi["motivo_no_recibe"] != "") & ~bi["local"].isin(list(asign_ex))].itertuples(index=False):
             nocons.append({"Estadístico": g, "Descripción": desc, "Local": r.local, "Nombre": r.designacion.title(),
-                           "Supervisor": r.supervisor, "Gerente": r.gerente, "Motivo": r.motivo_no_recibe,
+                           "Supervisor": r.supervisor, "Gerente": r.gerente, "Motivo": _motivo_no_recibe(r),
+                           "Exhibición": r.exhibicion, "Falta Exhibición": int(r.falta_exhib),
                            "Venta Diaria": round(r.venta_diaria, 3), "Fuente Venta": r.fuente_venta, "Stock Actual": r.stock,
                            "Días Actuales": round(r.dias_actuales, 1) if pd.notna(r.dias_actuales) else None})
-        asignado = sum(asign.values())
+        ex = sum(asign_ex.values())
+        asignado = sum(asign.values()) + ex
         cap_total = int(cand["capacidad"].sum()) if len(cand) else 0
+        cap_ex = int(cand_ex["falta_exhib"].sum()) if len(cand_ex) else 0
         recibe = cand.loc[list(asign)] if asign else cand.iloc[0:0]
         dias_fin = ((recibe["stock"] + pd.Series(asign)) / recibe["venta_diaria"]) if asign else pd.Series(dtype=float)
         items.append({
             "Estadístico": g, "Descripción": desc, "Bodega": bodega, "Cantidad a Mover": q,
-            "Asignado": asignado, "Sobrante": q - asignado, "% Asignado": asignado / q if q else 0,
-            "Locales en Base": len(bi), "Locales Habilitados": len(cand), "Locales que Reciben": len(asign),
+            "Asignado": asignado, "Sobrante": q - asignado, "Para Exhibición": ex, "% Asignado": asignado / q if q else 0,
+            "Locales en Base": len(bi), "Locales Habilitados": len(cand), "Locales Sin Venta a Completar": len(cand_ex),
+            "Locales que Reciben": len(asign) + len(asign_ex),
             "Capacidad hasta Días Máx": cap_total, "Empaque Usado": pack,
             "Días Finales Mín": round(float(dias_fin.min()), 1) if len(dias_fin) else None,
             "Días Finales Máx": round(float(dias_fin.max()), 1) if len(dias_fin) else None,
-            "Observación": _obs_item(len(bi), len(cand), q, asignado, cap_total, pack),
+            "Observación": _obs_item(len(bi), len(cand) + len(cand_ex), q, asignado, cap_total + cap_ex, pack),
         })
     dist = pd.DataFrame(filas)
     por_item = pd.DataFrame(items)
@@ -458,6 +506,7 @@ def distribuir_cd(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
         "items": len(por_item), "und_mover": int(por_item["Cantidad a Mover"].sum()) if len(por_item) else 0,
         "und_asignadas": int(por_item["Asignado"].sum()) if len(por_item) else 0,
         "und_sobrante": int(por_item["Sobrante"].sum()) if len(por_item) else 0,
+        "und_exhib": int(por_item["Para Exhibición"].sum()) if len(por_item) else 0,
         "traspasos": len(dist), "locales": int(dist["Local Destino"].nunique()) if len(dist) else 0,
         "dias_max": p.dias_max,
     }
@@ -476,11 +525,11 @@ def _obs_item(en_base, habil, q, asig, cap, pack):
     if en_base == 0:
         return "El estadístico no está en la base de locales"
     if habil == 0:
-        return "Ningún local de la base puede recibir (sin venta o ya con los días máx)"
+        return "Ningún local de la base puede recibir (sin venta con exhibición completa o ya con los días máx)"
     if asig >= q:
         return "Asignado completo"
     if cap < q:
-        return f"Los locales solo pueden recibir {cap} und sin pasar los días máx"
+        return f"Los locales solo pueden recibir {cap} und sin pasar los días máx (y completando exhibiciones)"
     if pack > 1:
         return f"Queda sobrante por redondeo a empaque de {pack}"
     return "Sobrante sin asignar"
@@ -514,10 +563,10 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
     modo = p.nivel_m2 if p.nivel_m2 in MODOS_M2 else "ambos"
     niveles = {"ambos": (NIVEL_SUP, NIVEL_GER), "supervisor": (NIVEL_SUP,), "gerente": (NIVEL_GER,)}[modo]
 
-    def candidatos(i, nivel):
+    def candidatos(i, nivel, exhib=False):
         r = mov.loc[i]
         g = r.estadistico
-        bi = b[(b["estadistico"] == g) & (b["motivo_no_recibe"] == "")]
+        bi = b[(b["estadistico"] == g) & ((b["falta_exhib"] > 0) if exhib else (b["motivo_no_recibe"] == ""))]
         bi = bi[~bi["local"].isin(origenes_item.get(g, set()))]
         if nivel == NIVEL_SUP:
             bi = bi[(bi["supervisor"] != "") & (bi["supervisor"] == r.supervisor)] if r.supervisor else bi.iloc[0:0]
@@ -527,24 +576,36 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
                 bi = bi[bi["supervisor"] != r.supervisor]
         return bi.set_index("local")
 
-    for nivel in niveles:
+    exhib_i = {i: 0 for i in mov.index}
+    recibio_ex: set[tuple] = set()
+    # primero los locales con venta (por días) en todos los niveles; luego, con lo que sobre,
+    # la exhibición de los locales sin venta (mismo orden de niveles)
+    for exhib, nivel in [(False, nv) for nv in niveles] + [(True, nv) for nv in niveles]:
+        if exhib and not p.cubrir_exhibicion:
+            break
         for i in mov.index:
             if restante[i] <= 0:
                 continue
             r = mov.loc[i]
             g = r.estadistico
-            cand = candidatos(i, nivel)
+            cand = candidatos(i, nivel, exhib)
             if not len(cand):
                 continue
             pack = _empaque_item(b[b["estadistico"] == g]) if p.redondear_empaque else 1
             previo = {l: recibido.get((l, g), 0) for l in cand.index}
-            asign = nivelar(restante[i], cand, previo, p.dias_max, pack)
+            if exhib:
+                asign = llenar_exhibicion(restante[i], cand, previo, pack)
+                exhib_i[i] += sum(asign.values())
+                recibio_ex.update((l, g) for l in asign)
+            else:
+                asign = nivelar(restante[i], cand, previo, p.dias_max, pack)
             for l, a in sorted(asign.items(), key=lambda t: -t[1]):
                 f = {"Nivel": nivel, "Local Origen": r.origen,
                      "Nombre Origen": str(resp["designacion"].get(r.origen, "")).title() if r.origen in resp.index else "",
                      "Supervisor Origen": r.supervisor, "Gerente Origen": r.gerente,
                      "Estadístico": g, "Descripción": _desc(b, g, r.descripcion_mov)}
-                f.update(_fila_destino(_Fila(l, cand.loc[l]), a, previo.get(l, 0), p.dias_max))
+                f.update(_fila_destino(_Fila(l, cand.loc[l]), a, previo.get(l, 0), p.dias_max,
+                                       CRIT_EXHIB if exhib else CRIT_DIAS))
                 filas.append(f)
                 recibido[(l, g)] = recibido.get((l, g), 0) + a
             tot = sum(asign.values())
@@ -588,6 +649,7 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
         fila = {"Local Origen": r.origen, "Supervisor Origen": r.supervisor, "Gerente Origen": r.gerente,
                 "Estadístico": g, "Descripción": _desc(b, g, r.descripcion_mov), "Cantidad a Mover": q,
                 NIVEL_SUP: a1, NIVEL_GER: a2, NIVEL_MAN: falta, "% Asignado": (a1 + a2) / q if q else 0,
+                "Para Exhibición": exhib_i[i],
                 "Observación": motivo or "Asignado completo"}
         items.append(fila)
         if falta > 0:
@@ -600,13 +662,16 @@ def redistribuir_locales(base: pd.DataFrame, mover: pd.DataFrame, p: Parametros,
     nocons = []
     for g in mov["estadistico"].unique():
         for r in b[(b["estadistico"] == g) & (b["motivo_no_recibe"] != "")].itertuples(index=False):
+            if (r.local, g) in recibio_ex:
+                continue
             nocons.append({"Estadístico": g, "Descripción": r.descripcion, "Local": r.local, "Nombre": r.designacion.title(),
-                           "Supervisor": r.supervisor, "Gerente": r.gerente, "Motivo": r.motivo_no_recibe,
+                           "Supervisor": r.supervisor, "Gerente": r.gerente, "Motivo": _motivo_no_recibe(r),
+                           "Exhibición": r.exhibicion, "Falta Exhibición": int(r.falta_exhib),
                            "Venta Diaria": round(r.venta_diaria, 3), "Fuente Venta": r.fuente_venta, "Stock Actual": r.stock,
                            "Días Actuales": round(r.dias_actuales, 1) if pd.notna(r.dias_actuales) else None})
     sm = lambda c: int(por_item[c].sum()) if len(por_item) else 0
     res = {"origenes": len(por_item), "und_mover": sm("Cantidad a Mover"), "nivel_sup": sm(NIVEL_SUP),
-           "nivel_ger": sm(NIVEL_GER), "pendiente": sm(NIVEL_MAN), "traspasos": len(dist),
+           "nivel_ger": sm(NIVEL_GER), "pendiente": sm(NIVEL_MAN), "exhib": sm("Para Exhibición"), "traspasos": len(dist),
            "locales": int(dist["Local Destino"].nunique()) if len(dist) else 0, "dias_max": p.dias_max,
            "modo": modo}
     return Resultado(dist, por_item, pd.DataFrame(pend), pd.DataFrame(nocons), res)

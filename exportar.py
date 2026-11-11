@@ -82,6 +82,7 @@ def _encabezado_resumen(ws, titulo, p: Parametros, kpis: list[tuple]):
                 f"Venta diaria: {_fuente(p)}"
                 f" · Stock = INV NETO + ROQ LTC + ROQ PTL"
                 f" · {'Redondeo a múltiplos de EMPAQUE' if p.redondear_empaque else 'Unidades sueltas'}"
+                f" · {'Locales sin venta: se completa la exhibición' if p.cubrir_exhibicion else 'Locales sin venta: no reciben'}"
                 + (f" · Redistribución: {MODOS_M2.get(p.nivel_m2, '').lower()}" if titulo.startswith("REDISTRIB") else ""))
     ws["A2"].font = Font(italic=True, size=9, color="595959")
     for k, (lbl, val) in enumerate(kpis):
@@ -159,8 +160,9 @@ def excel_cd(res: Resultado, p: Parametros) -> bytes:
         ("Sobrante", r["und_sobrante"]), ("Traspasos", r["traspasos"]), ("Locales que reciben", r["locales"])])
     pi = res.por_item.copy()
     if len(pi):
-        tabla = pi[["Estadístico", "Descripción", "Cantidad a Mover", "Asignado", "Sobrante", "% Asignado",
-                    "Locales Habilitados", "Locales que Reciben", "Capacidad hasta Días Máx", "Observación"]]
+        tabla = pi[["Estadístico", "Descripción", "Cantidad a Mover", "Asignado", "Sobrante", "Para Exhibición", "% Asignado",
+                    "Locales Habilitados", "Locales Sin Venta a Completar", "Locales que Reciben", "Capacidad hasta Días Máx",
+                    "Observación"]]
         ini = 8
         fin = _escribir_tabla(ws, tabla, ini)
         # tabla auxiliar para el gráfico (etiqueta corta)
@@ -181,11 +183,12 @@ def excel_cd(res: Resultado, p: Parametros) -> bytes:
     ws.freeze_panes = "A8"
     _hoja_forzados(wb, res.distribucion)
     _hoja(wb, "DISTRIBUCIÓN", res.distribucion, "DISTRIBUCIÓN A GRABAR",
-          f"Origen → local destino · estadístico · cantidad. Ningún local supera {p.dias_max:g} días de inventario.")
+          f"Origen → local destino · estadístico · cantidad. Ningún local con venta supera {p.dias_max:g} días de inventario. "
+          "Criterio «Exhibición (sin venta)»: completa la exhibición de locales sin venta con lo que sobró.")
     _hoja(wb, "SOBRANTE", res.pendientes, "UNIDADES SIN ASIGNAR",
           "Quedan en el CD: los locales habilitados no pueden recibir más sin pasar los días máximos.", ROJO)
     _hoja(wb, "LOCALES NO CONSIDERADOS", res.no_considerados, "LOCALES DE LA BASE QUE NO RECIBEN",
-          "Motivo: sin venta o ya con los días máximos cubiertos.", "595959")
+          "Motivo: sin venta (exhibición completa o no sobró inventario para completarla) o ya con los días máximos cubiertos.", "595959")
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -202,7 +205,7 @@ def excel_locales(res: Resultado, p: Parametros) -> bytes:
     pi = res.por_item.copy()
     if len(pi):
         tabla = pi[["Local Origen", "Supervisor Origen", "Gerente Origen", "Estadístico", "Descripción",
-                    "Cantidad a Mover", NIVEL_SUP, NIVEL_GER, NIVEL_MAN, "% Asignado", "Observación"]]
+                    "Cantidad a Mover", NIVEL_SUP, NIVEL_GER, NIVEL_MAN, "% Asignado", "Para Exhibición", "Observación"]]
         ini = 8
         fin = _escribir_tabla(ws, tabla, ini)
         ws.conditional_formatting.add(f"I{ini + 1}:I{fin}", CellIsRule(operator="greaterThan", formula=["0"],
@@ -251,11 +254,12 @@ def excel_locales(res: Resultado, p: Parametros) -> bytes:
     _hoja_forzados(wb, res.distribucion, con_origen=True)
     filtro = MODOS_M2.get(r.get("modo", "ambos"), MODOS_M2["ambos"])
     _hoja(wb, "DISTRIBUCIÓN", res.distribucion, "TRASPASOS ENTRE LOCALES A GRABAR",
-          f"Local origen → local destino. Redistribución: {filtro.lower()}. Ningún destino supera {p.dias_max:g} días.")
+          f"Local origen → local destino. Redistribución: {filtro.lower()}. Ningún destino con venta supera {p.dias_max:g} días; "
+          "criterio «Exhibición (sin venta)»: completa la exhibición de locales sin venta con lo que sobró.")
     _hoja(wb, "PENDIENTE MANUAL", res.pendientes, "PENDIENTE DE ASIGNACIÓN MANUAL",
           f"No hay capacidad dentro del filtro ({filtro.lower()}). Se sugieren locales fuera del filtro con capacidad.", ROJO)
     _hoja(wb, "LOCALES NO CONSIDERADOS", res.no_considerados, "LOCALES DE LA BASE QUE NO RECIBEN",
-          "Motivo: sin venta o ya con los días máximos cubiertos.", "595959")
+          "Motivo: sin venta (exhibición completa o no sobró inventario para completarla) o ya con los días máximos cubiertos.", "595959")
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

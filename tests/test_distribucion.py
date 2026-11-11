@@ -13,7 +13,7 @@ def test_lectura():
 
 
 def test_cd_no_supera_dias_y_nivela():
-    p = d.Parametros(dias_max=10)
+    p = d.Parametros(dias_max=10, cubrir_exhibicion=False)
     res = d.distribuir_cd(BASE, d.leer_mover_cd(D / "mover_cd.csv"), p)
     dist = res.distribucion.set_index("Local Destino")
     # capacidad: L1 10, L2 0 (ya tiene 10 días), L3 20, L4 20, L5 20; L6 sin venta, L7 sobrestock
@@ -132,7 +132,8 @@ def test_consumo_mes_anterior_dividido_dias_del_mes():
     assert prep.loc[5, "motivo_no_recibe"] == "SIN VENTA"
     # capacidad L1 = 10 días × 2 − 0 = 20; con el pronóstico (1/día) era 10
     assert prep.loc[1, "capacidad"] == 20
-    res = d.distribuir_cd(BASE, d.leer_mover_cd(D / "mover_cd.csv"), d.Parametros(dias_max=10, fuente_venta="mensual"), cm)
+    res = d.distribuir_cd(BASE, d.leer_mover_cd(D / "mover_cd.csv"),
+                          d.Parametros(dias_max=10, fuente_venta="mensual", cubrir_exhibicion=False), cm)
     assert set(res.distribucion["Local Destino"]) <= {1, 3, 4}
     assert (res.distribucion["Fuente Venta"] == "Consumo Oct-2026 ÷ 31 días").all()
 
@@ -220,3 +221,49 @@ def test_filtro_solo_gerente_incluye_locales_del_mismo_supervisor():
 def test_filtro_ambos_es_el_comportamiento_original():
     res = d.redistribuir_locales(BASE, _mov7(40), d.Parametros(dias_max=10, nivel_m2="ambos"))
     assert res.resumen["nivel_sup"] == 10 and res.resumen["nivel_ger"] == 30 and res.resumen["pendiente"] == 0
+
+
+# ---------------------------------------------------------------- exhibición en locales sin venta
+def test_cd_sin_venta_completa_exhibicion_con_el_sobrante():
+    res = d.distribuir_cd(BASE, d.leer_mover_cd(D / "mover_cd.csv"), d.Parametros(dias_max=10))
+    dist = res.distribucion.set_index("Local Destino")
+    # 70 und por días (L1, L3, L4, L5) y luego L6 (sin venta, stock 0, exhibición 4) recibe 4
+    assert dist.loc[6, "Criterio"] == d.CRIT_EXHIB and dist.loc[6, "Cantidad"] == 4
+    assert (res.distribucion.loc[res.distribucion["Criterio"] == d.CRIT_DIAS, "Días Finales"] <= 10).all()
+    assert res.resumen["und_asignadas"] == 74 and res.resumen["und_exhib"] == 4 and res.resumen["und_sobrante"] == 26
+    assert res.por_item["Para Exhibición"].iloc[0] == 4
+    assert 6 not in set(res.no_considerados["Local"])
+
+
+def test_cd_locales_con_venta_tienen_prioridad_sobre_exhibicion():
+    import pandas as pd
+    mov = d.normalizar_mover_cd(pd.DataFrame({"Estadístico": [111], "Cantidad": [30]}))
+    res = d.distribuir_cd(BASE, mov, d.Parametros(dias_max=10))
+    assert 6 not in set(res.distribucion["Local Destino"])       # no sobró nada para la exhibición
+    nc = res.no_considerados.set_index("Local").loc[6]
+    assert nc["Motivo"] == d.MOT_EXHIB and nc["Falta Exhibición"] == 4
+
+
+def test_exhibicion_con_empaque_envia_empaque_completo():
+    res = d.distribuir_cd(BASE, d.leer_mover_cd(D / "mover_cd.csv"), d.Parametros(dias_max=10, redondear_empaque=True))
+    dist = res.distribucion.set_index("Local Destino")
+    assert dist.loc[6, "Cantidad"] == 6                          # falta 4, se envía 1 empaque de 6
+
+
+def test_exhibicion_completa_no_recibe():
+    b = BASE.copy()
+    b.loc[b.local == 6, "inv_neto"] = 4                          # ya tiene la exhibición completa
+    res = d.distribuir_cd(b, d.leer_mover_cd(D / "mover_cd.csv"), d.Parametros(dias_max=10))
+    assert 6 not in set(res.distribucion["Local Destino"])
+    assert res.no_considerados.set_index("Local").loc[6, "Motivo"] == "SIN VENTA"
+
+
+def test_locales_exhibicion_despues_de_dias_en_mismo_supervisor():
+    import pandas as pd
+    b = pd.concat([BASE, BASE[BASE.local == 1].assign(local=8, designacion="LOCAL 8", consumo_acu=0, pronostico=0.0,
+                                                       inv_neto=1)], ignore_index=True)
+    res = d.redistribuir_locales(b, _mov7(60), d.Parametros(dias_max=10))
+    dist = res.distribucion.set_index("Local Destino")
+    assert dist.loc[8, "Criterio"] == d.CRIT_EXHIB and dist.loc[8, "Cantidad"] == 3 and dist.loc[8, "Nivel"] == d.NIVEL_SUP
+    assert res.resumen["nivel_sup"] == 13 and res.resumen["nivel_ger"] == 40 and res.resumen["pendiente"] == 7
+    assert res.resumen["exhib"] == 3

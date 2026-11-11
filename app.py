@@ -20,7 +20,7 @@ import portal
 # Streamlit Cloud a veces vuelve a ejecutar app.py con una versión anterior de los módulos en memoria
 # (después de actualizar el repositorio). Si las versiones no coinciden, se recargan ANTES de importar sus nombres
 # (si se importaran antes, una función nueva de estilo.py daría ImportError).
-VERSION_MOTOR = "2026-11-11.3"
+VERSION_MOTOR = "2026-11-11.4"
 if getattr(d, "VERSION", None) != VERSION_MOTOR:
     import importlib
     for _m in (d, estilo, exportar, plantillas, portal):
@@ -135,6 +135,9 @@ with st.sidebar:
                               help="Usa la columna EMPAQUE de la base: cada local recibe empaques completos; puede quedar sobrante.")
         filtrar_bodega = st.checkbox("Solo locales de la bodega de salida", value=True,
                                      help="Usa la columna BODEGA de la base para cruzar con la bodega del inventario a mover.")
+        cubrir_exhib = st.checkbox("Completar exhibición en locales sin venta", value=True,
+                                   help="Si un local no tiene venta y su stock no cubre la Uni Exhibición, recibe lo que le falta "
+                                        "para completarla. Se atiende con lo que sobra después de los locales con venta.")
     with st.expander("Cómo decide el programa", icon=":material/help:"):
         st.markdown(
             "- **Venta diaria** del local según el parámetro elegido (mes anterior: consumo del mes ÷ días del mes).\n"
@@ -142,12 +145,13 @@ with st.sidebar:
             "- **Capacidad** = días máx × venta diaria − stock actual.\n"
             "- **Nivelación:** se entrega de a una unidad (o empaque) al local con **menos días de inventario**, "
             "hasta repartir todo o hasta que todos lleguen a los días máximos.\n"
-            "- Un local **sin venta** no recibe.\n"
+            "- Un local **sin venta** no recibe por días. Si su stock no completa la **exhibición**, recibe lo que le falta "
+            "(con lo que sobra después de los locales con venta; con empaque, se envía el empaque completo).\n"
             "- **Módulo 2:** según el filtro elegido: mismo supervisor y luego mismo gerente, solo mismo supervisor o "
             "solo mismo gerente; lo que no cabe queda **pendiente manual** con sugerencias de locales fuera del filtro.")
 params = d.Parametros(dias_max=dias_max, fuente_venta={F_MES: "mensual", F_PRON: "pronostico", F_ACU: "consumo"}[fuente],
                       dias_consumo_acu=dias_acu,
-                      redondear_empaque=empaque, filtrar_bodega=filtrar_bodega)
+                      redondear_empaque=empaque, filtrar_bodega=filtrar_bodega, cubrir_exhibicion=cubrir_exhib)
 
 # ----------------------------------------------------------------------
 # Encabezado + selector de módulo
@@ -332,7 +336,7 @@ def calcular(es_m1, base, mov, p_tuple, consumo, version):
 
 
 p_tuple = (params.dias_max, params.fuente_venta, params.dias_consumo_acu,
-           params.redondear_empaque, params.filtrar_bodega, params.nivel_m2)
+           params.redondear_empaque, params.filtrar_bodega, params.nivel_m2, params.cubrir_exhibicion)
 if consumo is not None:
     sin_consumo = sorted(set(mov["estadistico"]) - set(consumo["estadistico"]))
     if sin_consumo:
@@ -381,8 +385,17 @@ def tabla(df, **kw):
     st.dataframe(df, hide_index=True, width="stretch", height=alto_tabla(len(df)), column_config=cfg, **kw)
 
 
+def nota_exhib(dist, und):
+    """Aviso de cuánto se envió para completar exhibición en locales sin venta."""
+    if und and len(dist):
+        locs = dist.loc[dist["Criterio"] == d.CRIT_EXHIB, "Local Destino"].nunique()
+        nota(f"<b>{n(und)}</b> unidades completan la exhibición de <b>{locs}</b> local(es) sin venta. "
+             f"En la distribución aparecen con el criterio «{d.CRIT_EXHIB}».", "ok")
+
+
 def grafico_dias(dist, sub):
     """Días de inventario antes y después en los locales que reciben (top 25 por cantidad)."""
+    dist = dist[dist["Venta Diaria"] > 0] if len(dist) else dist      # los envíos para exhibición no tienen días
     if not len(dist):
         return
     dd = dist.groupby(["Local Destino", "Nombre Destino", "Estadístico", "Descripción"], as_index=False).agg(
@@ -408,13 +421,14 @@ def barras_apiladas(df, cat, cols, colores, titulo, sub, orden=None, alto_fila=3
     largo = largo[largo["und"] > 0]
     if not len(largo):
         return
+    largo["_o"] = largo["serie"].map({c: i for i, c in enumerate(cols)})       # apila en el orden de `cols`
     orden = orden or df.sort_values(cols[0], ascending=False)[cat].tolist()
     ch = alt.Chart(largo).mark_bar(cornerRadiusEnd=4, size=18).encode(
         y=alt.Y(f"{cat}:N", sort=orden, title=None, axis=alt.Axis(labelLimit=300)),
         x=alt.X("und:Q", title=None, axis=alt.Axis(format="~s")),
         color=alt.Color("serie:N", scale=alt.Scale(domain=cols, range=colores),
                         legend=alt.Legend(title=None, orient="bottom") if (leyenda and len(cols) > 1) else None),
-        order=alt.Order("serie:N"),
+        order=alt.Order("_o:Q"),
         tooltip=[alt.Tooltip(f"{cat}:N", title=" "), alt.Tooltip("serie:N", title="Concepto"), alt.Tooltip("und:Q", title="Unidades", format=",")]
     ).properties(height=alto_fila * df[cat].nunique() + (70 if (leyenda and len(cols) > 1) else 40))
     grafico(titulo, sub, ch)
@@ -431,15 +445,20 @@ if es_m1:
             ("Sobrante en CD", n(r["und_sobrante"]), f"{pct(r['und_sobrante'], r['und_mover'])} del total", C_PEND),
             ("Traspasos", n(r["traspasos"]), "líneas a grabar", C_ALT),
             ("Locales que reciben", n(r["locales"]), f"tope {dias_max:g} días", C_BAJO),
-            ("Días finales (máx.)", n(dist["Días Finales"].max()) if len(dist) else "—", "en los locales que reciben", ROJO_OSC),
+            ("Días finales (máx.)", n(dist["Días Finales"].max()) if len(dist) and dist["Días Finales"].notna().any() else "—",
+             "en los locales con venta", ROJO_OSC),
         ])
+        nota_exhib(dist, r.get("und_exhib", 0))
         pi = res.por_item.copy()
         pi["prod"] = pi["Estadístico"].astype(str) + " · " + pi["Descripción"].str.slice(0, 34).str.title()
         g1, g2 = st.columns([1.5, 1])
         with g1:
-            barras_apiladas(pi.rename(columns={"Asignado": "Asignado", "Sobrante": "Sobrante"}), "prod", ["Asignado", "Sobrante"],
-                            [C_OK, C_PEND], "Asignado vs. sobrante por estadístico",
-                            "El sobrante es lo que los locales no pueden recibir sin pasar los días máximos.")
+            pi["Por días"] = pi["Asignado"] - pi["Para Exhibición"]
+            pi["Exhibición"] = pi["Para Exhibición"]
+            barras_apiladas(pi, "prod", ["Por días", "Exhibición", "Sobrante"],
+                            [C_OK, C_ALT, C_PEND], "Asignado vs. sobrante por estadístico",
+                            "Por días: locales con venta. Exhibición: locales sin venta que completan su exhibición. "
+                            "Sobrante: lo que ningún local puede recibir.")
         with g2:
             if len(res.no_considerados):
                 mc = res.no_considerados["Motivo"].value_counts().rename_axis("Motivo").reset_index(name="Locales")
@@ -495,6 +514,7 @@ else:
             ("Traspasos", n(r["traspasos"]), "líneas a grabar", C_BAJO),
             ("Locales que reciben", n(r["locales"]), f"tope {dias_max:g} días", ROJO_OSC),
         ])
+        nota_exhib(dist, r.get("exhib", 0))
         tot = max(r["und_mover"], 1)
         partes = [(d.NIVEL_SUP, r["nivel_sup"], C_OK), (d.NIVEL_GER, r["nivel_ger"], C_ALT), (d.NIVEL_MAN, r["pendiente"], C_EXT)]
         barras = "".join(f'<div style="flex:{v};background:{c}" title="{p}: {n(v)}">{pct(v, tot)}</div>' for p, v, c in partes if v > 0)
